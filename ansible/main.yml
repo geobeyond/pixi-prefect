@@ -1,0 +1,17 @@
+---
+# Main deployment playbook - orchestrates all components
+
+- name: Load secrets
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Include secrets file if it exists
+      include_vars: secrets.yml
+      failed_when: false
+      tags: always
+
+- import_playbook: common-tools.yml
+- import_playbook: postgresql-deployment.yml
+- import_playbook: caddy-deployment.yml
+- import_playbook: prefect-server-deployment.yml
+- import_playbook: prefect-worker-deployment.yml

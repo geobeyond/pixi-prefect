@@ -1,0 +1,50 @@
+---
+- name: Deploy common tools to all nodes
+  hosts: all
+  become: yes
+  tags: 
+    - "common"
+    - "prefect"
+
+  tasks:
+    - name: Create prefect user
+      user:
+        name: prefect
+        system: yes
+        shell: /bin/bash
+        home: /opt/prefect
+        create_home: yes
+
+    - name: Copy pixi binary to node
+      copy:
+        src: "{{ lookup('pipe', 'which pixi') }}"
+        dest: "/usr/local/bin/pixi"
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Copy pixi-unpack binary to node
+      copy:
+        src: "../pixi-unpack-deploy"
+        dest: "/usr/local/bin/pixi-unpack"
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Copy pixi base pack
+      copy:
+        src: "/tmp/prefect-base.tar"
+        dest: "/opt/prefect/prefect-base.tar"
+        owner: prefect
+        group: prefect
+        mode: "0644"
+
+    - name: Unpack pixi environment
+      shell: sudo -u prefect pixi-unpack --output-directory /opt/prefect/pixi-env /opt/prefect/prefect-base.tar
+      args:
+        creates: /opt/prefect/pixi-env
+
+    - name: Remove pixi pack file
+      file:
+        path: "/opt/prefect/prefect-base.tar"
+        state: absent

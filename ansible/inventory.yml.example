@@ -1,0 +1,10 @@
+# inventory.yml.example file - copy this into a new inventory.yml file and fill with real values
+
+---
+prefect_servers:
+  hosts:
+    10.0.100.240:
+
+prefect_workers:
+  hosts:
+    10.0.100.178:

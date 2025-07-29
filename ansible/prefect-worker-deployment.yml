@@ -1,0 +1,44 @@
+---
+- name: Deploy Prefect worker with pixi
+  hosts: prefect_workers
+  become: yes
+  tags: 
+    - "prefect"
+    - "worker"
+  vars:
+    prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
+
+  tasks:
+    - name: Create flows directory
+      file:
+        path: "/opt/prefect/flows"
+        state: directory
+        owner: prefect
+        group: prefect
+        mode: "0755"
+
+    - name: Create Prefect worker systemd unit
+      template:
+        src: "templates/prefect-worker.service.j2"
+        dest: "/etc/systemd/system/prefect-worker.service"
+        mode: "0644"
+      notify:
+        - reload systemd
+        - restart prefect worker
+
+    - name: Start and enable Prefect worker
+      systemd:
+        name: prefect-worker
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart prefect worker
+      systemd:
+        name: prefect-worker
+        state: restarted

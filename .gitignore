@@ -205,3 +205,23 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Ansible secrets and sensitive files
+secrets.yml
+vault.yml
+*.vault
+.vault_pass
+
+# Environment-specific inventory files
+ansible/inventory.yml
+
+# Temporary files
+*.retry
+.ansible/
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

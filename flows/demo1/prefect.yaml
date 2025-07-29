@@ -1,0 +1,9 @@
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /flows/demo1
+
+deployments:
+  - name: my_workflow_deployment
+    entrypoint: main.py:my_workflow
+    work_pool:
+      name: process-pool

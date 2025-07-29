@@ -1,0 +1,28 @@
+# Reverse proxy with HTTP basic auth for accessing prefect UI
+#
+
+{
+  log {
+    output stdout
+    format console
+  }
+}
+
+# Prefect UI
+:4200 {
+
+  @api path /api/* /openapi.json
+
+  handle @api {
+    reverse_proxy localhost:4201
+  }
+
+  handle {
+    basicauth {
+      admin {{ caddy_password_hash }}
+    }
+    reverse_proxy localhost:4201
+
+  }
+
+}

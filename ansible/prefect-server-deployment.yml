@@ -1,0 +1,76 @@
+---
+- name: Deploy Prefect server with pixi
+  hosts: prefect_servers
+  become: yes
+  tags: 
+    - "prefect"
+    - "server"
+  vars:
+    prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
+    postgresql_password: "{{ hostvars['localhost']['postgresql_password'] | default(lookup('env', 'POSTGRESQL_PASSWORD')) }}"
+
+  tasks:
+    - name: Create Prefect server systemd unit
+      template:
+        src: "templates/prefect-server.service.j2"
+        dest: "/etc/systemd/system/prefect-server.service"
+        mode: "0644"
+      notify:
+        - reload systemd
+        - restart prefect server
+
+    - name: Start and enable Prefect server
+      systemd:
+        name: prefect-server
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Wait for Prefect server to start
+      wait_for:
+        port: 4200
+        host: "{{ prefect_server_ip }}"
+        delay: 10
+        timeout: 180
+
+    - name: Create Prefect process work pool
+      shell: >
+        cd /opt/prefect && sudo -u prefect /opt/prefect/pixi-env/env/bin/prefect work-pool create process-pool --type process
+      environment:
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        HOME: /opt/prefect
+      ignore_errors: yes
+
+    - name: Create Prefect low priority queue
+      shell: >
+        cd /opt/prefect && sudo -u prefect /opt/prefect/pixi-env/env/bin/prefect work-queue create low --pool process-pool --priority 10
+      environment:
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        HOME: /opt/prefect
+      ignore_errors: yes
+
+    - name: Create Prefect high priority queue
+      shell: >
+        cd /opt/prefect && sudo -u prefect /opt/prefect/pixi-env/env/bin/prefect work-queue create high --pool process-pool --priority 5 --limit 3
+      environment:
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        HOME: /opt/prefect
+      ignore_errors: yes
+
+    - name: Create Prefect critical priority queue
+      shell: >
+        cd /opt/prefect && sudo -u prefect /opt/prefect/pixi-env/env/bin/prefect work-queue create critical --pool process-pool --priority 1 --limit 1
+      environment:
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        HOME: /opt/prefect
+      ignore_errors: yes
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart prefect server
+      systemd:
+        name: prefect-server
+        state: restarted

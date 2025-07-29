@@ -1,0 +1,20 @@
+[Unit]
+Description=Prefect server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=exec
+User=prefect
+Group=prefect
+WorkingDirectory=/opt/prefect
+Environment=PREFECT_HOME=/opt/prefect/.prefect
+Environment=PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:{{ postgresql_password }}@localhost/prefect
+Environment=PREFECT_SERVER_API_HOST=0.0.0.0
+Environment=PREFECT_SERVER_API_PORT=4201
+ExecStart=/opt/prefect/pixi-env/env/bin/prefect server start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
