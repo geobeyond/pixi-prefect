@@ -1,9 +1,10 @@
-pull:
-  - prefect.deployments.steps.set_working_directory:
-      directory: /flows/demo1
-
 deployments:
-  - name: my_workflow_deployment
+  - name: demo_flow
     entrypoint: main.py:my_workflow
     work_pool:
       name: process-pool
+      work_queue_name: low
+    job_variables:
+      command: |
+        pixi --manifest-path /flows/demo1/pixi.toml run python -m prefect.engine
+      working_dir: /flows/demo1
