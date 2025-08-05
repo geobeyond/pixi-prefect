@@ -3,8 +3,7 @@
   hosts: prefect_servers
   become: yes
   tags: 
-    - "caddy"
-    - "webserver"
+    - "prefect-server"
   vars:
     caddy_config_dir: "/etc/caddy"
     caddy_password: "{{ hostvars['localhost']['caddy_password'] | default(lookup('env', 'CADDY_PASSWORD')) }}"
@@ -56,7 +55,7 @@
         path: "/tmp/{{ item | basename }}"
         state: absent
       with_fileglob:
-        - "../offline-packages/caddy/*.deb"
+        - "/tmp/offline-packages/caddy/*.deb"
 
   handlers:
     - name: restart caddy

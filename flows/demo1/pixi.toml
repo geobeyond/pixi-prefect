@@ -10,3 +10,4 @@ version = "0.1.0"
 [dependencies]
 prefect = "==3.4.10"
 whenever = ">=0.8.8,<0.9"
+python = "3.12.*"

@@ -3,8 +3,7 @@
   hosts: prefect_servers
   become: yes
   tags: 
-    - "database"
-    - "postgresql"
+    - "prefect-server"
   vars:
     postgresql_version: "17"
     postgresql_db_name: "prefect"
@@ -12,55 +11,70 @@
     postgresql_password: "{{ hostvars['localhost']['postgresql_password'] | default(lookup('env', 'POSTGRESQL_PASSWORD')) }}"
 
   tasks:
-    - name: Copy PostgreSQL .deb packages to server
-      copy:
-        src: "{{ item }}"
-        dest: "/tmp"
-        mode: "0644"
-      with_fileglob:
-        - "/tmp/offline-packages/postgresql/*.deb"
-
-    - name: Install PostgreSQL packages
-      shell: dpkg -i /tmp/*.deb
-      register: dpkg_result
-      failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
-      notify: restart postgresql
-
-    - name: Start and enable PostgreSQL
+    - name: Check if PostgreSQL is running
       systemd:
         name: postgresql
-        state: started
-        enabled: yes
+      register: postgresql_status
+      ignore_errors: yes
 
-    - name: Create PostgreSQL database
-      command: sudo -u postgres createdb {{ postgresql_db_name }}
-      register: createdb_result
-      failed_when: createdb_result.rc != 0 and "already exists" not in createdb_result.stderr
+    - name: Install PostgreSQL
+      when: postgresql_status is undefined or postgresql_status.status.ActiveState != "active"
+      block:
+        - name: Copy PostgreSQL .deb packages to server
+          copy:
+            src: "{{ item }}"
+            dest: "/tmp"
+            mode: "0644"
+          with_fileglob:
+            - "/tmp/offline-packages/postgresql/*.deb"
 
-    - name: Create PostgreSQL DB user
-      command: sudo -u postgres psql -c "CREATE USER {{ postgresql_user }} WITH PASSWORD '{{ postgresql_password }}';"
-      register: createuser_result
-      failed_when: createuser_result.rc != 0 and "already exists" not in createuser_result.stderr
+        - name: Install PostgreSQL packages
+          shell: dpkg -i /tmp/*.deb
+          register: dpkg_result
+          failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
+          notify: restart postgresql
 
-    - name: Grant privileges to DB user
-      command: sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ postgresql_db_name }} TO {{ postgresql_user }};"
+        - name: Start and enable PostgreSQL
+          systemd:
+            name: postgresql
+            state: started
+            enabled: yes
 
-    - name: Grant schema privileges to DB user
-      command: sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON SCHEMA public TO {{ postgresql_user }};" {{ postgresql_db_name }}
+        - name: Clean up temporary PostgreSQL .deb files
+          file:
+            path: "/tmp/{{ item | basename }}"
+            state: absent
+          with_fileglob:
+            - "/tmp/offline-packages/postgresql/*.deb"
 
-    - name: Configure PostgreSQL to allow local connections
-      lineinfile:
-        path: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
-        line: "host    {{ postgresql_db_name }}    {{ postgresql_user }}    127.0.0.1/32    md5"
-        insertafter: "# IPv4 local connections:"
-      notify: restart postgresql
+    - name: Configure PostgreSQL database and user
+      block:
+        - name: Create PostgreSQL database
+          become_user: postgres
+          command: createdb {{ postgresql_db_name }}
+          register: createdb_result
+          failed_when: createdb_result.rc != 0 and "already exists" not in createdb_result.stderr
 
-    - name: Clean up temporary PostgreSQL .deb files
-      file:
-        path: "/tmp/{{ item | basename }}"
-        state: absent
-      with_fileglob:
-        - "../offline-packages/postgresql/*.deb"
+        - name: Create PostgreSQL DB user
+          become_user: postgres
+          command: psql -c "CREATE USER {{ postgresql_user }} WITH PASSWORD '{{ postgresql_password }}';"
+          register: createuser_result
+          failed_when: createuser_result.rc != 0 and "already exists" not in createuser_result.stderr
+
+        - name: Grant privileges to DB user
+          become_user: postgres
+          command: psql -c "GRANT ALL PRIVILEGES ON DATABASE {{ postgresql_db_name }} TO {{ postgresql_user }};"
+
+        - name: Grant schema privileges to DB user
+          become_user: postgres
+          command: psql -c "GRANT ALL PRIVILEGES ON SCHEMA public TO {{ postgresql_user }};" {{ postgresql_db_name }}
+
+        - name: Configure PostgreSQL to allow local connections
+          lineinfile:
+            path: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+            line: "host    {{ postgresql_db_name }}    {{ postgresql_user }}    127.0.0.1/32    md5"
+            insertafter: "# IPv4 local connections:"
+          notify: restart postgresql
 
   handlers:
     - name: restart postgresql

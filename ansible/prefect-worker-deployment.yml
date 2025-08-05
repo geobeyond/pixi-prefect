@@ -3,8 +3,7 @@
   hosts: prefect_workers
   become: yes
   tags: 
-    - "prefect"
-    - "worker"
+    - "prefect-worker"
   vars:
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
 

@@ -3,10 +3,44 @@
   hosts: all
   become: yes
   tags: 
-    - "common"
-    - "prefect"
+    - "prefect-server"
+    - "prefect-worker"
 
   tasks:
+
+    - name: Check if ACL is installed
+      command: dpkg -l acl
+      register: acl_status
+      changed_when: false
+      failed_when: false
+
+    - name: Install ACL package
+      when: acl_status.rc != 0
+      block:
+        - name: Ensure ACL packages directory exists
+          file:
+            path: "/tmp/offline-packages/acl"
+            state: directory
+            mode: "0755"
+
+        - name: Copy acl .deb packages to server
+          copy:
+            src: "{{ item }}"
+            dest: "/tmp/offline-packages/acl/"
+            mode: "0644"
+          with_fileglob:
+            - "/tmp/offline-packages/acl/*.deb"
+
+        - name: Install acl packages
+          shell: dpkg -i /tmp/offline-packages/acl/*.deb
+          register: dpkg_result
+          failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
+
+        - name: Clean up temporary acl .deb files
+          file:
+            path: "/tmp/offline-packages/acl"
+            state: absent
+
     - name: Create prefect user
       user:
         name: prefect
@@ -40,7 +74,8 @@
         mode: "0644"
 
     - name: Unpack pixi environment
-      shell: sudo -u prefect pixi-unpack --output-directory /opt/prefect/pixi-env /opt/prefect/prefect-base.tar
+      become_user: prefect
+      shell: pixi-unpack --output-directory /opt/prefect/pixi-env /opt/prefect/prefect-base.tar
       args:
         creates: /opt/prefect/pixi-env
 

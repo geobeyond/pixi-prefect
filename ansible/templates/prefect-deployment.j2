@@ -1,0 +1,14 @@
+deployments:
+  - name: "{{ deployment_name }}"
+    entrypoint: "{{ flow_entrypoint }}"
+    {% if deployment_schedule is defined %}
+    schedule:
+        cron: "{{ deployment_schedule }}"
+    {% endif %}
+    work_pool:
+      name: process-pool
+      work_queue_name: low
+    job_variables:
+      command: |
+        pixi --manifest-path {{ pixi_manifest_path }} run python -m prefect.engine
+      working_dir: "{{ flow_target_dir }}"

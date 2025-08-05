@@ -24,6 +24,12 @@ pushd /tmp/offline-packages/caddy
 apt download $(echo "$CADDY_PACKAGES")
 popd
 
+mkdir -p /tmp/offline-packages/acl
+ACL_PACKAGES=$(cat offline-packages/acl-packages-to-download.txt)
+pushd /tmp/offline-packages/acl
+apt download $(echo "$ACL_PACKAGES")
+popd
+
 
 # Cleanup
 sudo rm /etc/apt/sources.list.d/postgresql.list

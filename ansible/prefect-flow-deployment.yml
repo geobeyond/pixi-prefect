@@ -1,0 +1,97 @@
+---
+- name: Deploy Prefect Flow
+  hosts: prefect_workers
+  become: yes
+  tags: 
+    - "prefect-flow"
+  vars:
+    flow_root_dir: "{{ flow_dir }}"
+    flow_entrypoint: "{{ flow_entrypoint }}"
+    flow_function_name: "{{ flow_entrypoint.split(':')[1] }}"
+    deployment_name: "{{ deployment_name | default(flow_function_name) }})"
+    flow_name: "{{ flow_name }}"
+    flow_target_dir: "/opt/prefect/flows/{{ flow_root_dir | basename }}"
+    pixi_manifest_path: "{{ flow_target_dir }}/pixi.toml"
+    work_pool_name: "{{ work_pool | default('green-pool') }}"
+    work_queue_name: "{{ work_queue | default('low') }}"
+    prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
+
+  tasks:
+    - name: Create temporary directory for flow packaging
+      delegate_to: localhost
+      become: no
+      tempfile:
+        state: directory
+      register: temp_dir
+
+    - name: Pack flow dependencies with pixi
+      delegate_to: localhost
+      become: no
+      shell: "pixi pack {{ flow_root_dir }}/pixi.toml --output-file {{ temp_dir.path }}/flow-env.tar"
+
+    - name: Create flow directory on target
+      file:
+        path: "{{ flow_target_dir }}"
+        state: directory
+        owner: prefect
+        group: prefect
+        mode: "0755"
+
+#    - name: Copy flow files to target
+#      copy:
+#        src: "{{ flow_root_dir }}/"
+#        dest: "{{ flow_target_dir }}/"
+#        owner: prefect
+#        group: prefect
+#        mode: preserve
+#        exclude:
+#          - "*.pixi/"
+#          - "**/*.pyc"
+#          - "**/__pycache__/"
+
+    - name: Synchronize flow files to target
+      ansible.posix.synchronize:
+        src: "{{ flow_root_dir }}/"
+        dest: "{{ flow_target_dir }}/"
+        rsync_opts:
+          - "--exclude=*.pixi/"
+          - "--exclude=**/*.pyc"
+          - "--exclude=**/__pycache__/"
+          - "--chown=prefect:prefect"
+        delete: yes
+
+    - name: Copy pixi pack to target
+      copy:
+        src: "{{ temp_dir.path }}/flow-env.tar"
+        dest: "{{ flow_target_dir }}/flow-env.tar"
+        owner: prefect
+        group: prefect
+        mode: "0644"
+
+    - name: Unpack pixi environment
+      become_user: prefect
+      shell: pixi-unpack --output-directory {{ flow_target_dir }}/pixi-env {{ flow_target_dir }}/flow-env.tar
+      args:
+        creates: "{{ flow_target_dir }}/pixi-env"
+
+    - name: Create prefect.yaml from template
+      template:
+        src: templates/prefect-deployment.j2
+        dest: "{{ flow_target_dir }}/prefect.yaml"
+        owner: prefect
+        group: prefect
+        mode: "0644"
+
+    - name: Deploy flow to prefect server
+      become_user: prefect
+      shell: |
+        cd {{ flow_target_dir }} && \
+        pixi run prefect deploy
+      environment:
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+
+    - name: Clean up temporary directory
+      delegate_to: localhost
+      file:
+        path: "{{ temp_dir.path }}"
+        state: absent
