@@ -30,6 +30,12 @@ pushd /tmp/offline-packages/acl
 apt download $(echo "$ACL_PACKAGES")
 popd
 
+mkdir -p /tmp/offline-packages/rsync
+RSYNC_PACKAGES=$(cat offline-packages/rsync-packages-to-download.txt)
+pushd /tmp/offline-packages/rsync
+apt download $(echo "$RSYNC_PACKAGES")
+popd
+
 
 # Cleanup
 sudo rm /etc/apt/sources.list.d/postgresql.list

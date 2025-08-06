@@ -1,10 +1,10 @@
 deployments:
-  - name: "{{ deployment_name }}"
+  - name: "{{ flow_deployment_name }}"
     entrypoint: "{{ flow_entrypoint }}"
-    {% if deployment_schedule is defined %}
+{% if deployment_schedule is defined %}
     schedule:
         cron: "{{ deployment_schedule }}"
-    {% endif %}
+{% endif %}
     work_pool:
       name: process-pool
       work_queue_name: low

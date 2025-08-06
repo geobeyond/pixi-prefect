@@ -41,6 +41,39 @@
             path: "/tmp/offline-packages/acl"
             state: absent
 
+    - name: Check if rsync is installed
+      command: dpkg -l rsync
+      register: rsync_status
+      changed_when: false
+      failed_when: false
+
+    - name: Install rsync package
+      when: rsync_status.rc != 0
+      block:
+        - name: Ensure rsync packages directory exists
+          file:
+            path: "/tmp/offline-packages/rsync"
+            state: directory
+            mode: "0755"
+
+        - name: Copy rsync .deb packages to server
+          copy:
+            src: "{{ item }}"
+            dest: "/tmp/offline-packages/rsync/"
+            mode: "0644"
+          with_fileglob:
+            - "/tmp/offline-packages/rsync/*.deb"
+
+        - name: Install rsync packages
+          shell: dpkg -i /tmp/offline-packages/rsync/*.deb
+          register: dpkg_result
+          failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
+
+        - name: Clean up temporary rsync .deb files
+          file:
+            path: "/tmp/offline-packages/rsync"
+            state: absent
+
     - name: Create prefect user
       user:
         name: prefect

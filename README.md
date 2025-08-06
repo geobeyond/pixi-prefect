@@ -41,11 +41,11 @@ There are three types of deployment that need to be considered:
 > [!note]
 > This is known to work on `ubuntu:24.04` cloud variant.
 
-Start by installing [pipx], which will be used to install ansible - get it from the default ubuntu repos
+Start by installing rsync and [pipx], which will be used to install ansible - get it from the default ubuntu repos
 
 ```shell
 sudo apt update && \
-sudo apt install --yes pipx
+sudo apt install --yes pipx rsync
 pipx ensurepath
 ```
 
@@ -80,17 +80,17 @@ In order to deploy the prefect server you will need to:
 
    This can be done by either:
 
-   - Getting the files from object storage
+   - Getting the files from object storage and into the `/tmp/offline-packages` directory`
    - Running the `download-packages.sh` script, which would download them from the ubuntu repositories
 
    > [!WARNING]
-   > In either case, the downloaded .deb files must be placed at `/tmp/offline-packages/{postgresql,caddy}`
+   > In either case, the downloaded .deb files must be placed at `/tmp/offline-packages/{acl,caddy,postgresql,rsync}`
 
 2. Create a pixi packed environment with prefect and its additional dependencies
 
    This can be done by either:
 
-   - Getting the already-packed env from object storage
+   - Getting the already-packed env from object storage and into the `/tmp/prefect-base.tar` file
    - Using `pixi-pack` 
 
      ```shell
