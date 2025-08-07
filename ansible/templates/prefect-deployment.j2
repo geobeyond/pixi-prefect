@@ -6,9 +6,8 @@ deployments:
         cron: "{{ deployment_schedule }}"
 {% endif %}
     work_pool:
-      name: process-pool
-      work_queue_name: low
-    job_variables:
-      command: |
-        pixi --manifest-path {{ pixi_manifest_path }} run python -m prefect.engine
-      working_dir: "{{ flow_target_dir }}"
+      name: {{ work_pool_name }}
+      work_queue_name: {{ work_queue_name }}
+      job_variables:
+        command: {{ pixi_run_command }} python -m prefect.engine
+        working_dir: "{{ flow_target_dir }}"

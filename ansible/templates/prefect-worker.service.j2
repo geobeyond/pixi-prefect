@@ -11,7 +11,7 @@ WorkingDirectory=/opt/prefect
 Environment=PREFECT_HOME=/opt/prefect/.prefect
 Environment=PREFECT_API_URL=http://{{ prefect_server_ip }}:4201/api
 Environment=PYTHONPATH=/opt/prefect/flows
-ExecStart=/opt/prefect/pixi-env/env/bin/prefect worker start --pool process-pool --limit 5
+ExecStart=/opt/prefect/pixi-env/env/bin/prefect worker start --pool {{ work_pool_name }} --limit 5
 Restart=always
 RestartSec=10
 

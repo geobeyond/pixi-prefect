@@ -11,8 +11,10 @@
     flow_deployment_name: "{{ deployment_name | default(flow_function_name) }}"
     flow_name: "{{ flow_name }}"
     flow_target_dir: "/opt/prefect/flows/{{ flow_root_dir | basename }}"
+    pixi_envs_dir: "{{ flow_target_dir}}/.pixi/envs"
     pixi_manifest_path: "{{ flow_target_dir }}/pixi.toml"
-    work_pool_name: "{{ work_pool | default('green-pool') }}"
+    pixi_run_command: "pixi run --no-lockfile-update --frozen"
+    work_pool_name: "{{ work_pool | default('green') }}"
     work_queue_name: "{{ work_queue | default('low') }}"
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
 
@@ -37,6 +39,14 @@
         group: prefect
         mode: "0755"
 
+    - name: Create pixi envs directory on target
+      file:
+        path: "{{ pixi_envs_dir }}"
+        state: directory
+        owner: prefect
+        group: prefect
+        mode: "0755"
+
     - name: Synchronize flow files to target
       ansible.posix.synchronize:
         src: "{{ flow_root_dir }}/"
@@ -45,7 +55,6 @@
           - "--exclude=*.pixi/"
           - "--exclude=**/*.pyc"
           - "--exclude=**/__pycache__/"
-          - "--exclude=pixi.lock"
           - "--exclude=prefect.yaml"
           - "--chown=prefect:prefect"
         delete: yes
@@ -60,9 +69,9 @@
 
     - name: Unpack pixi environment
       become_user: prefect
-      shell: pixi-unpack --output-directory {{ flow_target_dir }}/pixi-env {{ flow_target_dir }}/flow-env.tar
+      shell: pixi-unpack --env-name default --output-directory {{ pixi_envs_dir }} {{ flow_target_dir }}/flow-env.tar
       args:
-        creates: "{{ flow_target_dir }}/pixi-env"
+        creates: "{{ pixi_envs_dir }}/env"
 
     - name: Create prefect.yaml from template
       template:
@@ -73,10 +82,11 @@
         mode: "0644"
 
     - name: Deploy flow to prefect server
+      run_once: true
       become_user: prefect
-      shell: |
-        cd {{ flow_target_dir }} && \
-        pixi-env/env/bin/prefect deploy
+      shell: "{{ pixi_run_command }} prefect deploy"
+      args:
+        chdir: "{{ flow_target_dir }}"
       environment:
         PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
 

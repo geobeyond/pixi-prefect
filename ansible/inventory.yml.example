@@ -3,8 +3,21 @@
 ---
 prefect_servers:
   hosts:
-    10.0.100.240:
+    10.0.100.230:
+
+prefect_workers_green:
+  hosts:
+    10.0.100.60:
+    10.0.100.20:
+  vars:
+    work_pool_name: green
+
+prefect_workers_blue:
+  hosts:
+  vars:
+    work_pool_name: blue
 
 prefect_workers:
-  hosts:
-    10.0.100.178:
+  children:
+    prefect_workers_green:
+    prefect_workers_blue:

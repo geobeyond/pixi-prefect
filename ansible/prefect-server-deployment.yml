@@ -8,6 +8,19 @@
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
     prefect_api_url: "http://0.0.0.0:4201/api"
     postgresql_password: "{{ hostvars['localhost']['postgresql_password'] | default(lookup('env', 'POSTGRESQL_PASSWORD')) }}"
+    prefect_work_pools:
+      - name: green
+        enabled: "{{ groups['prefect_workers_green'] | default([]) | length > 0 }}"
+        queues:
+          - { name: low, priority: 10 }
+          - { name: high, priority: 5, limit: 3 }
+          - { name: critical, priority: 1, limit: 1 }
+      - name: blue
+        enabled: "{{ groups['prefect_workers_blue'] | default([]) | length > 0 }}"
+        queues:
+          - { name: low, priority: 10 }
+          - { name: high, priority: 5, limit: 3 }
+          - { name: critical, priority: 1, limit: 1 }
 
   tasks:
     - name: Create Prefect server systemd unit
@@ -33,92 +46,28 @@
         delay: 10
         timeout: 180
 
-    - name: Create Prefect green work pool
+    - name: Create Prefect work pools
       become: yes
       become_user: prefect
       shell: >
         cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-pool create green-pool --type process
+        pixi-env/env/bin/prefect work-pool create {{ item.name }} --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
         HOME: /opt/prefect
+      loop: "{{ prefect_work_pools | selectattr('enabled') | list }}"
       ignore_errors: yes
 
-    - name: Create Prefect blue work pool
+    - name: Create work queues
       become: yes
       become_user: prefect
       shell: >
         cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-pool create blue-pool --type process
+        pixi-env/env/bin/prefect work-queue create {{ item.1.name }} --pool {{ item.0.name }} --priority {{ item.1.priority }}{% if item.1.limit is defined %} --limit {{ item.1.limit }}{% endif %}
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
         HOME: /opt/prefect
-      ignore_errors: yes
-
-    - name: Create Prefect blue low priority queue
-      become: yes
-      become_user: prefect
-      shell: >
-        cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create low --pool blue-pool --priority 10
-      environment:
-        PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
-      ignore_errors: yes
-
-    - name: Create Prefect blue high priority queue
-      become: yes
-      become_user: prefect
-      shell: >
-        cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create high --pool blue-pool --priority 5 --limit 3
-      environment:
-        PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
-      ignore_errors: yes
-
-    - name: Create Prefect blue critical priority queue
-      become: yes
-      become_user: prefect
-      shell: >
-        cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create critical --pool blue-pool --priority 1 --limit 1
-      environment:
-        PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
-      ignore_errors: yes
-
-    - name: Create Prefect green low priority queue
-      become: yes
-      become_user: prefect
-      shell: >
-        cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create low --pool green-pool --priority 10
-      environment:
-        PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
-      ignore_errors: yes
-
-    - name: Create Prefect green high priority queue
-      become: yes
-      become_user: prefect
-      shell: >
-        cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create high --pool green-pool --priority 5 --limit 3
-      environment:
-        PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
-      ignore_errors: yes
-
-    - name: Create Prefect green critical priority queue
-      become: yes
-      become_user: prefect
-      shell: >
-        cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create critical --pool green-pool --priority 1 --limit 1
-      environment:
-        PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
+      loop: "{{ prefect_work_pools | selectattr('enabled') | subelements('queues') }}"
       ignore_errors: yes
 
   handlers:

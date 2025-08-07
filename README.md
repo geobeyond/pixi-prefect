@@ -75,33 +75,38 @@ pixi global install pixi-pack pixi-unpack
 
 In order to deploy the prefect server you will need to:
 
-1. Download all the system dependencies for the PostgreSQL database and the Caddy web server, which are being
-   used in the prefect server setup
+Download all the system dependencies for the PostgreSQL database and the Caddy web server, which are being
+used in the prefect server setup
 
-   This can be done by either:
+This can be done by either:
 
-   - Getting the files from object storage and into the `/tmp/offline-packages` directory`
-   - Running the `download-packages.sh` script, which would download them from the ubuntu repositories
+- Getting the files from object storage and into the `/tmp/offline-packages` directory`
+- Running the `download-packages.sh` script, which would download them from the ubuntu repositories
 
-   > [!WARNING]
-   > In either case, the downloaded .deb files must be placed at `/tmp/offline-packages/{acl,caddy,postgresql,rsync}`
+> [!WARNING]
+> In either case, the downloaded .deb files must be placed at `/tmp/offline-packages/{acl,caddy,postgresql,rsync}`
 
-2. Create a pixi packed environment with prefect and its additional dependencies
 
-   This can be done by either:
+Now create a pixi packed environment with prefect and its additional dependencies
 
-   - Getting the already-packed env from object storage and into the `/tmp/prefect-base.tar` file
-   - Using `pixi-pack` 
+This can be done by either:
 
-     ```shell
-     pixi pack --output-file /tmp/prefect-base.tar
-     ```
+- Getting the already-packed env from object storage and into the `/tmp/prefect-base.tar` file
+- Using `pixi-pack` 
 
-   > [!WARNING]
-   > In either case, the downloaded .deb files must be placed at `/tmp/prefect-base.tar`
+  ```shell
+  pixi pack --output-file /tmp/prefect-base.tar
+  ```
+
+> [!WARNING]
+> In either case, the downloaded .deb files must be placed at `/tmp/prefect-base.tar`
+
+
+Create also:
 
 - The ansible secrets file, located at `ansible/secrets.yml`. Create this file, taking the 
   existing `secrets.yml.example` file as a reference
+
 - The ansible inventory file, located at `ansible/inventory.yml`. Create this file, taking the 
   existing `inventory.yml.example` file as a reference and add the addresses of the respective prefect server and worker 
   nodes.
@@ -116,6 +121,7 @@ In order to deploy the prefect server you will need to:
 > 
 > More info here: https://github.com/ansible/ansible/issues/63870
 
+
 Proceed to deploy the prefect server node with the following command:
 
 ```shell
@@ -123,14 +129,15 @@ cd ansible
 ansible-playbook -i inventory.yml main.yml --tags prefect-server 
 ```
 
-After the deployment is complete, you can access the prefect server UI by tunneling both ports 4200 and 4201 to 
-your local machine:
-
-```shell
-ssh -L 4200:localhost:4200 -L 4201:localhost:4201 -N <ssh-host-alias>
-```
-
-Now you can access the prefect server UI by visiting `http://localhost:4200` with your browser.
+> [!TIP]
+> After the deployment is complete, you can access the prefect server UI by tunneling both ports 4200 and 4201 to 
+> your local machine:
+> 
+> ```shell
+> ssh -L 4200:localhost:4200 -L 4201:localhost:4201 -N <ssh-host-alias>
+> ```
+> 
+> Now you can access the prefect server UI by visiting `http://localhost:4200` with your browser.
 
 
 ## Deployment of the prefect worker nodes
@@ -149,53 +156,32 @@ ansible-playbook -i inventory.yml main.yml --tags prefect-worker
 ```
 
 
-
-### Contacting the prefect server
-
-The architecture described at the top of the files specifies that the prefect server will be running on an isolated
-network. However, if you have suitable credentials in order to login to the `ansible-controller` and the 
-`prefect-server` nodes, you can setup an SSH tunnel like this:
-
-```shell
-ssh -L 4200:localhost:4200 -L 4201:localhost:4201 -N prefect-server
-```
-
-> [!note]
-> The above command assumes that `prefect-server` is suitably configured for SSH in your `~/.ssh/config` file
-> 
-
-This will allow you to both:
-
-- Access the prefect server UI using your browser by visiting `http://localhost:4200`
-- Access the prefect server API by making requests to `http://localhost:4200/api/`
-
-
-
-## Joining new prefect worker nodes to the cluster
+### Joining new prefect worker nodes to the cluster
 
 The number of prefect worker nodes can be managed dynamically. Each time a new node is added, the prefect base 
 environment must be installed and configured. Additionally, the environments of existing flows must also be installed
-in the worker node.
+in the worker node. In practice this means:
+
+1. Update the ansible inventory file
+2. Run the ansible playbook that performs deployment of prefect workers again
 
 
 ## Deploying prefect flows
 
 Each prefect flow runs on its own isolated environment. This means that each flow's environment must be deployed
-on the worker nodes where the flow can be executed. It also means that the actual flow must be deployed my means of 
+on the worker nodes where the flow can be executed. It also means that the actual flow must be deployed by means of 
 creating a prefect deployment that uses local storage.
 
 In order to deploy a new prefect flow into the airgapped cluster you need to
 
-1. Prepare a directory with the flow and a suitable `pixi.toml` file
+1. Prepare a directory with the flow and suitable `pixi.toml` and `pixi.lock` files
 
    A flow is deployable to the airgapped cluster if you prepare a directory with the following contents:
 
-   - `main.py` - the flow itself
+   - `<some_python_module>.py` - the file containing the flow itself
    - `pixi.toml` - the pixi configuration file, containing the necessary information to fetch the flow dependencies
-   - `pixi.lock` - the lockfile for the flow dependencies, specifying the version of each dependency used by the flow
-      - this is optional, as pixi will recreate this file, but recommended.
+   - `pixi.lock` - the lockfile for the flow dependencies
    
-
    Check the _Creating a new flow_ section below for an example of how to create a new flow.
 
 2. Run the relevant ansible playbook, passing it suitable arguments:
@@ -204,27 +190,23 @@ In order to deploy a new prefect flow into the airgapped cluster you need to
    
       ```shell
       ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
-          -e "flow_dir=../flows/demo1" -e "flow_entrypoint=main.py:my_workflow"
+          -e "flow_dir=/pixi-prefect/flows/demo1" -e "flow_entrypoint=main.py:my_workflow"
       ```
       
    2. Passing also the `deployment_name` argument:
 
       ```shell
       ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
-          -e "flow_dir=../flows/demo1" -e "flow_entrypoint=main.py:my_workflow"
+          -e "flow_dir=/pixi-prefect/flows/demo1" -e "flow_entrypoint=main.py:my_workflow" -e "deployment_name=some-name"
       ```
       
-   3. Specifying a different work pool and work queue (these default to `green-pool` and `low`, respectively)
+   3. Specifying a different work pool and work queue (these default to `green` and `low`, respectively)
 
       ```shell
       ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
-          -e "flow_dir=../flows/demo1" -e "flow_entrypoint=main.py:my_workflow"
+          -e "flow_dir=../flows/demo1" -e "flow_entrypoint=main.py:my_workflow" -e "work_pool=blue" -e "work_queue=high"
       ```
    
-
-
-
-
 
 ### Creating a new flow
  
