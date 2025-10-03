@@ -6,6 +6,7 @@
     - "prefect-worker"
   vars:
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
+    default_worker_limit: 8
 
   tasks:
     - name: Create flows directory
@@ -15,6 +16,26 @@
         owner: prefect
         group: prefect
         mode: "0755"
+
+    - name: Validate worker configuration
+      assert:
+        that:
+          - work_pool_name is defined
+        fail_msg: "Worker must have work_pool_name defined in inventory"
+        success_msg: "Worker configuration valid: Pool={{ work_pool_name }}"
+
+    - name: Check if worker has GPUs configured
+      set_fact:
+        has_gpus: "{{ worker_gpu_ids is defined and worker_gpu_ids | length > 0 }}"
+
+    - name: Display worker configuration
+      debug:
+        msg: |
+          Configuring worker {{ inventory_hostname }}:
+            - GPU IDs: {{ worker_gpu_ids | default('none - CPU only') }}
+            - Work Pool: {{ work_pool_name }}-pool
+            - Worker Limit: {{ worker_limit | default(default_worker_limit) }}
+            - Has GPUs: {{ has_gpus }}
 
     - name: Create Prefect worker systemd unit
       template:
@@ -31,6 +52,63 @@
         state: started
         enabled: yes
         daemon_reload: yes
+
+    - name: Build list of namespaced GPU identifiers
+      set_fact:
+        all_gpu_limits: >-
+          {%- set gpu_list = [] -%}
+          {%- for host in groups['prefect_workers'] -%}
+            {%- if hostvars[host].worker_gpu_ids is defined and hostvars[host].worker_gpu_ids | length > 0 -%}
+              {%- for gpu_id in hostvars[host].worker_gpu_ids.split(',') -%}
+                {%- set _ = gpu_list.append('gpu-' ~ host ~ '-' ~ gpu_id | trim) -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ gpu_list }}
+      run_once: true
+      delegate_to: localhost
+
+    - name: Display GPU concurrency limits to be created
+      debug:
+        msg: "GPU concurrency limits to create/verify: {{ all_gpu_limits if all_gpu_limits | length > 0 else 'none - no GPU workers in cluster' }}"
+      run_once: true
+
+    - name: Wait for Prefect server to be ready
+      wait_for:
+        port: 4200
+        host: "{{ prefect_server_ip }}"
+        delay: 5
+        timeout: 60
+      run_once: true
+      delegate_to: localhost
+      when: all_gpu_limits | length > 0
+
+    - name: Create concurrency limit for each namespaced GPU
+      become: yes
+      become_user: prefect
+      loop: "{{ all_gpu_limits }}"
+      shell: >
+        cd /opt/prefect && 
+        pixi-env/env/bin/prefect concurrency-limit create {{ item }} 1
+      environment:
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        HOME: /opt/prefect
+      register: concurrency_result
+      # Ignore errors if limit already exists
+      failed_when:
+        - concurrency_result.rc != 0
+        - "'already exists' not in concurrency_result.stderr"
+        - "'already exists' not in concurrency_result.stdout"
+      ignore_errors: yes
+      run_once: true
+      delegate_to: "{{ prefect_server_ip }}"
+      when: all_gpu_limits | length > 0
+
+    - name: Display concurrency limit creation results
+      debug:
+        msg: "Created/verified {{ all_gpu_limits | length }} GPU concurrency limits"
+      run_once: true
+      when: all_gpu_limits | length > 0
 
   handlers:
     - name: reload systemd

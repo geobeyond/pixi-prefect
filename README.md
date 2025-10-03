@@ -226,6 +226,14 @@ Python the latest minor version of Python 3.9:
 pixi add python=3.9
 ```
 
+Be sure to also add prefect as a dependency, specifically the same version minor version as the one used in the cluster.
+you can check the version specification used in the `pixi.toml` file located in the root of this repository. 
+For example:
+
+```shell
+pixi add "prefect>=3.4.10,<4"
+```
+
 Now author your flow in a new python file and install any required dependencies. For example:
 
 Adding the cowpy dependency:
