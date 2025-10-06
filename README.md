@@ -81,7 +81,12 @@ used in the prefect server setup
 This can be done by either:
 
 - Getting the files from object storage and into the `/tmp/offline-packages` directory`
-- Running the `download-packages.sh` script, which would download them from the ubuntu repositories
+- Running the `download-packages.sh` script, which would download them from the ubuntu repositories - this can be 
+  achieved with the following command:
+
+  ```shell
+  bash download-packages.sh
+  ```
 
 > [!WARNING]
 > In either case, the downloaded .deb files must be placed at `/tmp/offline-packages/{acl,caddy,postgresql,rsync}`
@@ -129,6 +134,16 @@ cd ansible
 ansible-playbook -i inventory.yml main.yml --tags prefect-server 
 ```
 
+After a successful deployment the node shall be running the prefect server instance with port 4200 serving the prefect
+UI and port 4201 serving the API.
+
+The server will have been instantiated with two work pools of type `process`. These are named:
+
+- `cpu-pool` This pool is meant to be used for flows that do not access any GPUs.
+- `gpu-pool`. This pool is meant to be used for flows that access GPUs.
+
+
+
 > [!TIP]
 > After the deployment is complete, you can access the prefect server UI by tunneling both ports 4200 and 4201 to 
 > your local machine:
@@ -138,6 +153,8 @@ ansible-playbook -i inventory.yml main.yml --tags prefect-server
 > ```
 > 
 > Now you can access the prefect server UI by visiting `http://localhost:4200` with your browser.
+> For authentication, username is `admin` and the password is the one you specified in the `secrets.yml` file.
+> 
 
 
 ## Deployment of the prefect worker nodes
@@ -155,6 +172,13 @@ cd ansible
 ansible-playbook -i inventory.yml main.yml --tags prefect-worker 
 ```
 
+After a successful deployment the worker node can be running up to two prefect worker instances, one for each work 
+pool that is configured in the node's section of the ansible inventory. 
+These are configured by the following systemd unit files:
+
+- `/etc/systemd/system/prefect-worker-cpu.service`
+- `/etc/systemd/system/prefect-worker-gpu.service`
+
 
 ### Joining new prefect worker nodes to the cluster
 
@@ -170,7 +194,20 @@ in the worker node. In practice this means:
 
 Each prefect flow runs on its own isolated environment. This means that each flow's environment must be deployed
 on the worker nodes where the flow can be executed. It also means that the actual flow must be deployed by means of 
-creating a prefect deployment that uses local storage.
+creating a prefect deployment that uses local storage. These steps are performed by the `prefect-flow-deployment.yml`
+ansible playbook.
+
+The playbook accepts the following arguments:
+
+- `flow_dir` (mandatory) - the directory containing the flow to be deployed, along with its `pixi.toml` and 
+  `pixi.lock` files
+- `entrypoint` (mandatory) - the entrypoint of the flow. This is the name of the python callable that is decorated with 
+  `@flow` in the flow's python module. It must be specified as `<python_module>:<flow_name>`, for example 
+  `main.py:my_workflow`
+- `work_pool` (optional) - the name of the work pool that the flow will use. If not specified, it defaults to
+  `cpu-pool` - **NOTE**: flows that require GPU access must use the `gpu-pool` work pool instead.
+- `deployment_name` (optional) - the name of the prefect deployment to be created. If not specified, it defaults to 
+  the name of the flow function
 
 In order to deploy a new prefect flow into the airgapped cluster you need to
 
@@ -184,27 +221,25 @@ In order to deploy a new prefect flow into the airgapped cluster you need to
    
    Check the _Creating a new flow_ section below for an example of how to create a new flow.
 
-2. Run the relevant ansible playbook, passing it suitable arguments:
+2. Run the `prefect-flow-deployment.yml` ansible playbook, passing it suitable arguments:
 
    1. Passing only the `flow_dir` and `flow_entrypoint` arguments, which are mandatory:
    
       ```shell
       ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
-          -e "flow_dir=/pixi-prefect/flows/demo1" -e "flow_entrypoint=main.py:my_workflow"
+          -e "flow_dir=/pixi-prefect/flows/demo2" -e "flow_entrypoint=main.py:my_workflow"
       ```
       
-   2. Passing also the `deployment_name` argument:
+      This will run on the `cpu-pool`, meaning that the flow will not be able to access GPUs, and the deployment
+      will be named `my_workflow`, which is the name of the flow function.
+      
+   2. Running on the `gpu-pool` work pool, in order to be able to acquire GPUs:
 
       ```shell
       ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
-          -e "flow_dir=/pixi-prefect/flows/demo1" -e "flow_entrypoint=main.py:my_workflow" -e "deployment_name=some-name"
-      ```
-      
-   3. Specifying a different work pool and work queue (these default to `green` and `low`, respectively)
-
-      ```shell
-      ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
-          -e "flow_dir=../flows/demo1" -e "flow_entrypoint=main.py:my_workflow" -e "work_pool=blue" -e "work_queue=high"
+          -e "flow_dir=/pixi-prefect/flows/demo3"  \
+          -e "flow_entrypoint=main.py:single_acquisition_prediction_flow" \
+          -e "work_pool=gpu-pool"
       ```
    
 
@@ -299,6 +334,39 @@ You can monitor the execution of the flow either on the prefect UI or on the ter
 Once the flow works OK and we are ready to have it sent to the airgapped prefect cluster we can now optionally, 
 stop both the local prefect server and the flow deployment we used for testing - just press `ctrl+C` on both 
 terminal windows.
+
+
+## Extra notes
+
+### Checking that an ansible playbook will produce the intended result
+
+You may use the `--check` argument to ansible-playbook in order to have it perform a dry-run of the playbook. 
+For example:
+
+```shell
+ansible-playbook -i inventory.yml prefect-flow-deployment.yml \
+-e "flow_dir=/pixi-prefect/flows/demo1" \
+-e "flow_entrypoint=main.py:my_workflow" \
+--check
+```
+
+It will produce an output with the changes that would be applied, without actually applying them.
+
+
+### Running a prefect-related command manually on a worker node
+
+In order to run a prefect-related command manually on a worker node, you must:
+
+- ssh to the node
+- switch to the `prefect` user
+- call prefect using its full path
+
+```shell
+# after having -> ssh <worker-node>
+sudo su prefect
+cd
+/opt/prefect/pixi-env/env/bin/prefect --help
+```
 
 
 

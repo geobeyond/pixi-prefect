@@ -1,10 +1,10 @@
 [Unit]
-Description=Prefect worker
+Description=Prefect GPU worker
 After=network.target
 Requires=network.target
 
 [Service]
-Type=exec
+Type=simple
 User=prefect
 Group=prefect
 WorkingDirectory=/opt/prefect
@@ -12,15 +12,13 @@ Environment=PREFECT_HOME=/opt/prefect/.prefect
 Environment=PREFECT_API_URL=http://{{ prefect_server_ip }}:4201/api
 Environment=PYTHONPATH=/opt/prefect/flows
 
-{% if worker_gpu_ids is defined and worker_gpu_ids | length > 0 %}
 # comma-separated list of GPU IDs, e.g. "0,1,2"
 Environment=WORKER_GPU_IDS={{ worker_gpu_ids }}
-{% endif %}
 
 # identifier used for namespacing gpu ids
 Environment=WORKER_ID={{ inventory_hostname }}
 
-ExecStart=/opt/prefect/pixi-env/env/bin/prefect worker start --pool {{ work_pool_name }} --limit {{ worker_limit | default(8) }}
+ExecStart=/opt/prefect/pixi-env/env/bin/prefect worker start --pool gpu-pool --limit {{ gpu_worker_limit | default(8) }}
 Restart=always
 RestartSec=10
 

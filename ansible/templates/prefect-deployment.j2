@@ -1,13 +1,15 @@
 deployments:
   - name: "{{ flow_deployment_name }}"
     entrypoint: "{{ flow_entrypoint }}"
-{% if deployment_schedule is defined %}
+{% if deployment_schedule is not none and deployment_schedule  != '' %}
     schedule:
         cron: "{{ deployment_schedule }}"
 {% endif %}
+{% if deployment_parameters is not none and deployment_parameters != '' %}
+    parameters: {{ deployment_parameters | tojson }}
+{% endif %}
     work_pool:
       name: {{ work_pool_name }}
-      work_queue_name: {{ work_queue_name }}
       job_variables:
         command: {{ pixi_run_command }} python -m prefect.engine
         working_dir: "{{ flow_target_dir }}"

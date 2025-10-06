@@ -45,7 +45,10 @@ from collections.abc import Generator
 
 from prefect import flow, task
 from prefect.concurrency.sync import concurrency
-from prefect.concurrency.asyncio import ConcurrencySlotAcquisitionError
+from prefect.concurrency.asyncio import (
+    AcquireConcurrencySlotTimeoutError,
+    ConcurrencySlotAcquisitionError,
+)
 from prefect.logging import get_run_logger
 
 
@@ -91,21 +94,21 @@ def acquire_gpu(logger: logging.Logger) -> Generator[int, None, None]:
         (gpu_id, f"gpu-{worker_id}-{gpu_id}")
         for gpu_id in existing_gpu_ids
     ]
-    logger.debug(f"Worker {worker_id} has GPUs: {existing_gpu_ids}")
-    logger.debug(
+    logger.info(f"Worker {worker_id} has GPUs: {existing_gpu_ids}")
+    logger.info(
         f"Prefect concurrency limit names to try to "
         f"acquire: {prefect_concurrency_limit_names}"
     )
 
     for gpu_id, prefect_limit_name in prefect_concurrency_limit_names:
         try:
-            with concurrency(prefect_limit_name, occupy=1):
+            with concurrency(prefect_limit_name, occupy=1, timeout_seconds=0.1):
                 logger.info(f"Acquired GPU {gpu_id} on worker {worker_id}")
                 yield gpu_id
                 logger.info(f"Released GPU {gpu_id} on worker {worker_id}")
                 return
-        except ConcurrencySlotAcquisitionError:
-            logger.debug(f"GPU {gpu_id} is busy, trying another one...")
+        except (AcquireConcurrencySlotTimeoutError, ConcurrencySlotAcquisitionError):
+            logger.info(f"GPU {gpu_id} is busy, trying another one...")
 
     raise RuntimeError(f"No available GPUs on worker {worker_id}")
 
@@ -158,7 +161,7 @@ def task_acquisition_prediction_flow():
         post_processing(gpu_id, prediction)
 
 
-@flow()
+@flow(retries=3, retry_delay_seconds=[30, 60, 120, 240])
 def single_acquisition_prediction_flow():
     """Simulates usage pattern where a GPU is acquired at the start of the
     flow and used for all tasks."""
