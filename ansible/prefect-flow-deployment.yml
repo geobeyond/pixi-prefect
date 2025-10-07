@@ -9,18 +9,50 @@
     flow_entrypoint: "{{ entrypoint }}"
     flow_function_name: "{{ flow_entrypoint.split(':')[1] }}"
     flow_deployment_name: "{{ deployment_name | default(flow_function_name) }}"
-    flow_name: "{{ flow_name }}"
     flow_target_dir: "/opt/prefect/flows/{{ flow_root_dir | basename }}"
     pixi_envs_dir: "{{ flow_target_dir}}/.pixi/envs"
     pixi_manifest_path: "{{ flow_target_dir }}/pixi.toml"
     pixi_run_command: "pixi run --no-lockfile-update --frozen"
-    work_pool_name: "{{ work_pool | default('green') }}"
-    work_queue_name: "{{ work_queue | default('low') }}"
+    work_pool_name: "{{ work_pool | default('cpu-pool') }}"
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
+    # optional variables for the deployment of the flow
+    deployment_schedule: "{{ schedule | default(None) }}"
+    deployment_parameters: "{{ extra_parameters | default(None) }}"
 
   tasks:
+
+    - name: Validate required variables
+      assert:
+        that:
+          - flow_root_dir is defined
+          - flow_entrypoint is defined
+        fail_msg: "Required variables: flow_dir, entrypoint"
+      run_once: true
+      delegate_to: localhost
+
+    - name: Check if flow directory exists
+      stat:
+        path: "{{ flow_root_dir }}"
+      register: flow_dir_stat
+      run_once: true
+      delegate_to: localhost
+      become: no
+
+    - name: Display deployment configuration
+      debug:
+        msg: |
+          Deploying flow:
+            - Entrypoint: {{ flow_entrypoint }}
+            - Deployment: {{ flow_deployment_name }}
+            - Work Pool: {{ work_pool_name }}
+            - Schedule: {{ deployment_schedule if deployment_schedule is not none else 'none' }}
+            - Parameters: {{ deployment_parameters if deployment_parameters is not none else 'none' }}
+            - Targets: {{ groups['prefect_workers'] | join(', ') }}
+      run_once: true
+
     - name: Create temporary directory for flow packaging
       delegate_to: localhost
+      run_once: true
       become: no
       tempfile:
         state: directory
@@ -28,6 +60,7 @@
 
     - name: Pack flow dependencies with pixi
       delegate_to: localhost
+      run_once: true
       become: no
       shell: "pixi pack {{ flow_root_dir }}/pixi.toml --output-file {{ temp_dir.path }}/flow-env.tar"
 
@@ -97,6 +130,17 @@
 
     - name: Clean up temporary directory
       delegate_to: localhost
+      run_once: true
       file:
         path: "{{ temp_dir.path }}"
         state: absent
+
+    - name: Display deployment success
+      debug:
+        msg: |
+          ✅ Flow deployed successfully!
+            
+          Deployment: {{ flow_deployment_name }}
+          Work Pool: {{ work_pool_name }}
+      run_once: true
+

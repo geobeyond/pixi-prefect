@@ -3,21 +3,33 @@
 ---
 prefect_servers:
   hosts:
-    10.0.100.230:
+    10.0.100.164:
 
-prefect_workers_green:
+# GPU-enabled workers
+prefect_workers_gpu:
   hosts:
-    10.0.100.60:
-    10.0.100.20:
+    10.0.100.167:
+      worker_gpu_ids: "0,1"
+      cpu_worker_limit: 16
+    10.0.100.36:
+      worker_gpu_ids: "0,1,2"
+      cpu_worker_limit: 8
   vars:
-    work_pool_name: green
+    enable_gpu_worker: true
+    enable_cpu_worker: true
 
-prefect_workers_blue:
+
+# workers that only have CPU compute available
+prefect_workers_cpu:
   hosts:
+    # this host has no GPUs ;(
+    10.0.100.22:
+      cpu_worker_limit: 32
   vars:
-    work_pool_name: blue
+    enable_gpu_worker: false
+    enable_cpu_worker: true
 
 prefect_workers:
   children:
-    prefect_workers_green:
-    prefect_workers_blue:
+    prefect_workers_gpu:
+    prefect_workers_cpu:

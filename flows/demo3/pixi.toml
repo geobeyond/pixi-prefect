@@ -1,0 +1,12 @@
+[workspace]
+authors = ["Ricardo Garcia Silva <ricardo.garcia.silva@gmail.com>"]
+channels = ["conda-forge"]
+name = "demo3"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.12.*"
+prefect = ">=3.4.10,<4"

@@ -8,19 +8,6 @@
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
     prefect_api_url: "http://0.0.0.0:4201/api"
     postgresql_password: "{{ hostvars['localhost']['postgresql_password'] | default(lookup('env', 'POSTGRESQL_PASSWORD')) }}"
-    prefect_work_pools:
-      - name: green
-        enabled: "{{ groups['prefect_workers_green'] | default([]) | length > 0 }}"
-        queues:
-          - { name: low, priority: 10 }
-          - { name: high, priority: 5, limit: 3 }
-          - { name: critical, priority: 1, limit: 1 }
-      - name: blue
-        enabled: "{{ groups['prefect_workers_blue'] | default([]) | length > 0 }}"
-        queues:
-          - { name: low, priority: 10 }
-          - { name: high, priority: 5, limit: 3 }
-          - { name: critical, priority: 1, limit: 1 }
 
   tasks:
     - name: Create Prefect server systemd unit
@@ -46,29 +33,44 @@
         delay: 10
         timeout: 180
 
-    - name: Create Prefect work pools
+    - name: Create GPU work pool
       become: yes
       become_user: prefect
       shell: >
         cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-pool create {{ item.name }} --type process
+        pixi-env/env/bin/prefect work-pool create gpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
         HOME: /opt/prefect
-      loop: "{{ prefect_work_pools | selectattr('enabled') | list }}"
+      register: gpu_pool_result
+      failed_when:
+        - gpu_pool_result.rc != 0
+        - "'already exists' not in gpu_pool_result.stderr"
+        - "'already exists' not in gpu_pool_result.stdout"
       ignore_errors: yes
 
-    - name: Create work queues
+    - name: Create CPU work pool
       become: yes
       become_user: prefect
       shell: >
         cd /opt/prefect && \
-        pixi-env/env/bin/prefect work-queue create {{ item.1.name }} --pool {{ item.0.name }} --priority {{ item.1.priority }}{% if item.1.limit is defined %} --limit {{ item.1.limit }}{% endif %}
+        pixi-env/env/bin/prefect work-pool create cpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
         HOME: /opt/prefect
-      loop: "{{ prefect_work_pools | selectattr('enabled') | subelements('queues') }}"
+      register: cpu_pool_result
+      failed_when:
+        - cpu_pool_result.rc != 0
+        - "'already exists' not in cpu_pool_result.stderr"
+        - "'already exists' not in cpu_pool_result.stdout"
       ignore_errors: yes
+
+    - name: Display work pool creation results
+      debug:
+        msg: |
+          Work pools created/verified:
+            - gpu-pool: {{ 'created' if gpu_pool_result.changed else 'already exists' }}
+            - cpu-pool: {{ 'created' if cpu_pool_result.changed else 'already exists' }}
 
   handlers:
     - name: reload systemd
