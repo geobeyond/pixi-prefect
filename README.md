@@ -359,13 +359,15 @@ In order to run a prefect-related command manually on a worker node, you must:
 
 - ssh to the node
 - switch to the `prefect` user
+- set the `PREFECT_API_URL` environment variable - you can check the correct in the prefect workers systemd unit 
+  files at `/etc/systemd/system/prefect-worker-{cpu,gpu}.service`
 - call prefect using its full path
 
 ```shell
 # after having -> ssh <worker-node>
 sudo su prefect
 cd
-/opt/prefect/pixi-env/env/bin/prefect --help
+PREFECT_API_URL=http://10.0.100.164:4201/api /opt/prefect/pixi-env/env/bin/prefect --help
 ```
 
 

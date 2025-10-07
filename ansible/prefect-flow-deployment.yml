@@ -128,6 +128,13 @@
         path: "{{ flow_target_dir }}/flow-env.tar"
         state: absent
 
+    - name: Clean up temporary directory
+      delegate_to: localhost
+      run_once: true
+      file:
+        path: "{{ temp_dir.path }}"
+        state: absent
+
     - name: Display deployment success
       debug:
         msg: |

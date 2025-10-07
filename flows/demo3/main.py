@@ -40,10 +40,14 @@ import contextlib
 import logging
 import os
 import random
+import shlex
+import subprocess
 import time
 from collections.abc import Generator
 
 from prefect import flow, task
+from prefect.client.orchestration import get_client
+from prefect.client.schemas.actions import GlobalConcurrencyLimitUpdate
 from prefect.concurrency.sync import concurrency
 from prefect.concurrency.asyncio import (
     AcquireConcurrencySlotTimeoutError,
@@ -99,22 +103,51 @@ def acquire_gpu(logger: logging.Logger) -> Generator[int, None, None]:
         f"Prefect concurrency limit names to try to "
         f"acquire: {prefect_concurrency_limit_names}"
     )
-
-    for gpu_id, prefect_limit_name in prefect_concurrency_limit_names:
-        try:
-            with concurrency(prefect_limit_name, occupy=1, timeout_seconds=0.1):
-                logger.info(f"Acquired GPU {gpu_id} on worker {worker_id}")
-                yield gpu_id
-                logger.info(f"Released GPU {gpu_id} on worker {worker_id}")
-                return
-        except (AcquireConcurrencySlotTimeoutError, ConcurrencySlotAcquisitionError):
-            logger.info(f"GPU {gpu_id} is busy, trying another one...")
+    acquired_limit_name = None
+    try:
+        for gpu_id, prefect_limit_name in prefect_concurrency_limit_names:
+            try:
+                with concurrency(prefect_limit_name, occupy=1, timeout_seconds=0.1):
+                    acquired_limit_name = prefect_limit_name
+                    acquired_gpu_id = gpu_id
+                    logger.info(f"Acquired GPU {acquired_gpu_id} on worker {worker_id}")
+                    yield gpu_id
+                    logger.info(f"Released GPU {acquired_gpu_id} on worker {worker_id}")
+                    return
+            except (AcquireConcurrencySlotTimeoutError, ConcurrencySlotAcquisitionError):
+                logger.info(f"GPU {gpu_id} is busy, trying another one...")
+    finally:
+        # for some unknown reason, which is most likely a prefect bug, sometimes
+        # the concurrency slot is not released when exiting the context manager.
+        # This is a workaround to ensure that the slot is released.
+        if acquired_limit_name is not None:
+            try:
+                with get_client(sync_client=True) as prefect_api_client:
+                    concurrency_limit = (
+                        prefect_api_client.read_global_concurrency_limit_by_name(
+                            acquired_limit_name)
+                    )
+                    logger.info(f"{concurrency_limit=}")
+                    if concurrency_limit.active_slots:
+                        logger.info(
+                            "Concurrency limit still shows active slots, resetting to 0..."
+                        )
+                        prefect_api_response = prefect_api_client.update_global_concurrency_limit(
+                            acquired_limit_name,
+                            GlobalConcurrencyLimitUpdate(active_slots=0)
+                        )
+                        logger.info(f"{prefect_api_response.status_code=}")
+                        logger.info(f"{prefect_api_response.json=}")
+                    else:
+                        logger.info("Concurrency limit is already reset")
+            except Exception as err:
+                logger.error(f"Failed to reset GPU concurrency limit: {err=}")
 
     raise RuntimeError(f"No available GPUs on worker {worker_id}")
 
 
 @task
-def pre_processing(gpu_id: int, simulate_work_for_seconds: int = 30) -> int:
+def pre_processing(gpu_id: int, simulate_work_for_seconds: int = 15) -> int:
     """
     Simulate a pre-processing step on image.
     """
@@ -126,7 +159,7 @@ def pre_processing(gpu_id: int, simulate_work_for_seconds: int = 30) -> int:
 
 
 @task
-def predict(gpu_id: int, data: int, simulate_work_for_seconds: int = 30) -> str:
+def predict(gpu_id: int, data: int, simulate_work_for_seconds: int = 15) -> str:
     """
     Simulate a Deep-Learning prediction on a specific GPU.
     """
@@ -138,7 +171,7 @@ def predict(gpu_id: int, data: int, simulate_work_for_seconds: int = 30) -> str:
 
 
 @task
-def post_processing(gpu_id: int, pred: str, simulate_work_for_seconds: int = 30) -> str:
+def post_processing(gpu_id: int, pred: str, simulate_work_for_seconds: int = 15) -> str:
     """
     Simulate a post-processing step on the DL predictions.
     """
@@ -161,7 +194,7 @@ def task_acquisition_prediction_flow():
         post_processing(gpu_id, prediction)
 
 
-@flow(retries=3, retry_delay_seconds=[30, 60, 120, 240])
+@flow(retries=3, retry_delay_seconds=30)
 def single_acquisition_prediction_flow():
     """Simulates usage pattern where a GPU is acquired at the start of the
     flow and used for all tasks."""
