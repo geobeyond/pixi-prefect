@@ -24,6 +24,12 @@ pushd /tmp/offline-packages/caddy
 apt download $(echo "$CADDY_PACKAGES")
 popd
 
+mkdir -p /tmp/offline-packages/ansible
+ANSIBLE_PACKAGES=$(cat offline-packages/ansible-packages-to-download.txt)
+pushd /tmp/offline-packages/ansible
+apt download $(echo "$ANSIBLE_PACKAGES")
+popd
+
 mkdir -p /tmp/offline-packages/acl
 ACL_PACKAGES=$(cat offline-packages/acl-packages-to-download.txt)
 pushd /tmp/offline-packages/acl

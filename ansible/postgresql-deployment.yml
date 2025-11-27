@@ -26,7 +26,7 @@
             dest: "/tmp"
             mode: "0644"
           with_fileglob:
-            - "/tmp/offline-packages/postgresql/*.deb"
+            - "/tmp/offline-packages/postgresql-{{ postgresql_version }}/*.deb"
 
         - name: Install PostgreSQL packages
           shell: dpkg -i /tmp/*.deb
@@ -45,7 +45,7 @@
             path: "/tmp/{{ item | basename }}"
             state: absent
           with_fileglob:
-            - "/tmp/offline-packages/postgresql/*.deb"
+            - "/tmp/offline-packages/postgresql-{{ postgresql_version }}/*.deb"
 
     - name: Configure PostgreSQL database and user
       block:

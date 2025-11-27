@@ -1,0 +1,40 @@
+name: Build Deployment Bundle
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  build-bundle:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Python version
+        run: |
+          python3 --version
+          which python3
+
+      - name: Run bundle creation script
+        run: |
+          python3 build-bundle.py
+        env:
+          BUNDLE_VERSION: ${{ github.sha }}
+
+      - name: List generated artifacts
+        run: |
+          echo "Generated bundle contents:"
+          ls -lah *.tar.gz
+
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: airgapped-bundle-${{ github.sha }}
+          path: '*.tar.gz'
+          retention-days: 90
+          if-no-files-found: error

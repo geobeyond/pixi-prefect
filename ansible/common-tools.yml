@@ -84,7 +84,7 @@
 
     - name: Copy pixi binary to node
       copy:
-        src: "{{ lookup('pipe', 'which pixi') }}"
+        src: "/tmp/pixi-binaries/pixi"
         dest: "/usr/local/bin/pixi"
         mode: "0755"
         owner: root
@@ -92,7 +92,7 @@
 
     - name: Copy pixi-unpack binary to node
       copy:
-        src: "../pixi-unpack-deploy"
+        src: "/tmp/pixi-binaries/pixi-unpack-deploy"
         dest: "/usr/local/bin/pixi-unpack"
         mode: "0755"
         owner: root

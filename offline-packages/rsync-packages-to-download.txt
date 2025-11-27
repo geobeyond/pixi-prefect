@@ -1,5 +1,5 @@
-init-system-helpers
 gcc-14-base
+init-system-helpers
 libacl1
 libc6
 libgcc-s1
@@ -9,6 +9,6 @@ libssl3t64
 libxxhash0
 libzstd1
 lsb-base
-sysvinit-utils
 rsync
+sysvinit-utils
 zlib1g
