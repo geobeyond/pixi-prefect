@@ -28,16 +28,51 @@ from subprocess import (
 from typing import Iterable
 
 
+def get_system_update_packages() -> list[str]:
+    """Get all packages that would be upgraded or installed during apt upgrade."""
+    result = run(
+        shlex.split("apt upgrade --simulate"),
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    packages = set()
+    for line in result.stdout.split("\n"):
+        if line.startswith("Inst "):
+            parts = line.split()
+            if len(parts) >= 2:
+                package_name = parts[1]
+                packages.add(package_name)
+    return sorted(packages)
+
+
 def build_pag_controller_bundle(version: str | None = None) -> None:
     base_dir = Path(__file__).parent
+    pixi_pack_dir = base_dir / "vendored"
     target_dir = base_dir / "pag-software-bundle"
     target_archive = base_dir / f"pag-software-bundle{f'-{version}' if version else ''}.tar.gz"
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
+        print("Updating package lists...")
+        run(
+            ["sudo", "apt", "update"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print("Collecting system update packages...")
+        system_updates = get_system_update_packages()
+        if system_updates:
+            download_dir = target_dir / "offline-packages/system-updates"
+            print(f"Downloading {len(system_updates)} system update packages to '{download_dir}'...")
+            download_deb_packages(download_dir, system_updates)
+        else:
+            print("No system updates available.")
+
         print("Copying pixi binary package...")
         shutil.copy(base_dir / "vendored/pixi", target_dir)
-        print("Copying pixi-unpack-deploy...")
-        shutil.copy(base_dir / "vendored/pixi-unpack-deploy", target_dir)
+        print("Copying pixi-unpack...")
+        shutil.copy(base_dir / "vendored/pixi-unpack", target_dir)
 
         for controller_dependency_name in ("ansible", "rsync"):
             sub_dependencies = get_deb_package_dependencies(controller_dependency_name)
@@ -83,9 +118,16 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
 
         print("Packing pixi environment...")
         run(
-            shlex.split(f"pixi pack --output-file {target_dir / 'prefect-base.tar'}"),
+            shlex.split(f"chmod +x pixi-pack"),
             capture_output=True,
-            cwd=base_dir,
+            cwd=pixi_pack_dir,
+            text=True,
+            check=True
+        )
+        run(
+            shlex.split(f"./pixi-pack {base_dir / 'pixi.toml'} --output-file {target_dir / 'prefect-base.tar'}"),
+            capture_output=True,
+            cwd=pixi_pack_dir,
             text=True,
             check=True
         )
@@ -115,23 +157,39 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
 def write_install_script(target_dir: Path) -> None:
     contents = (
         "#!/bin/bash\n"
-        "# 1. Install pag-controller system dependencies, which are located in\n"
-        "# the `offline-packages` directory\n"
-        "echo 'Installing ansible and rsync...'\n"
-        "sudo dpkg --install offline-packages/ansible/*.deb offline-packages/rsync/*.deb\n"
+        "set -o errexit\n\n"
+        "# 1. Apply system updates (if available)\n"
+        "if [ -d offline-packages/system-updates ]; then\n"
+        "    echo 'Applying system updates...'\n"
+        "    pushd offline-packages/system-updates\n"
+        "    sudo dpkg --install ./*.deb || sudo apt install --yes --fix-broken --allow-downgrades ./*.deb\n"
+        "    popd\n"
+        "fi\n"
         "\n"
-        "# 2. Copy system dependencies, which are located in\n"
+        "# 2. Install pag-controller system dependencies, which are located in\n"
+        "# the `offline-packages` directory\n"
+        "echo 'Installing rsync...'\n"
+        "pushd offline-packages/rsync\n"
+        "sudo dpkg --install ./*.deb || sudo apt install --yes --fix-broken --allow-downgrades ./*.deb\n"
+        "popd\n"
+        "\n"
+        "echo 'Installing ansible...'\n"
+        "pushd offline-packages/ansible\n"
+        "sudo dpkg --install ./*.deb || sudo apt install --yes --fix-broken --allow-downgrades ./*.deb\n"
+        "popd\n"
+        "\n"
+        "# 3. Copy system dependencies, which are located in\n"
         "# the `offline-packages` directory to /tmp/offline-packages\n"
         "mkdir --parents /tmp/offline-packages\n"
         "cp --recursive offline-packages/* /tmp/offline-packages\n"
         "\n"
-        "# 3. Copy the prefect base environment to /tmp\n"
+        "# 4. Copy the prefect base environment to /tmp\n"
         "cp prefect-base.tar /tmp\n"
         "\n"
-        "# 4. Copy the pixi-related binaries to /tmp\n"
+        "# 5. Copy the pixi-related binaries to /tmp\n"
         "mkdir --parents /tmp/pixi-binaries\n"
         "cp pixi /tmp/pixi-binaries\n"
-        "cp pixi-unpack-deploy /tmp/pixi-binaries\n"
+        "cp pixi-unpack /tmp/pixi-binaries\n"
         "\n"
         "echo 'Done - Now modify the provided ansible inventory and secrets files'\n"
     )

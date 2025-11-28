@@ -9,18 +9,24 @@
     caddy_password: "{{ hostvars['localhost']['caddy_password'] | default(lookup('env', 'CADDY_PASSWORD')) }}"
       
   tasks:
+    - name: Create temporary directory for Caddy packages
+      file:
+        path: "/tmp/caddy-packages"
+        state: directory
+        mode: "0755"
+
     - name: Copy Caddy .deb packages to server
       copy:
         src: "{{ item }}"
-        dest: "/tmp"
+        dest: "/tmp/caddy-packages"
         mode: "0644"
       with_fileglob:
         - "/tmp/offline-packages/caddy/*.deb"
 
     - name: Install Caddy package
-      shell: dpkg -i /tmp/caddy*.deb
-      register: dpkg_caddy_result
-      failed_when: dpkg_caddy_result.rc != 0 and "already installed" not in dpkg_caddy_result.stderr
+      shell: "dpkg install /tmp/caddy-packages/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/caddy-packages/*.deb"
+      register: apt_caddy_result
+      failed_when: apt_caddy_result.rc != 0
       notify: restart caddy
 
     - name: Create Caddy configuration directory

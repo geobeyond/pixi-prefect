@@ -1,0 +1,22 @@
+---
+- name: Apply System Updates
+  hosts: all
+  become: yes
+  tags:
+    - "prefect-server"
+    - "prefect-worker"
+  tasks:
+    - name: Check if system updates are available
+      stat:
+        path: "/tmp/offline-packages/system-updates"
+      register: system_updates_dir
+
+    - name: Apply system updates
+      when: system_updates_dir.stat.exists
+      block:
+        - name: Install system update packages
+          shell: "dpkg --install /tmp/offline-packages/system-updates/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/system-updates/*.deb"
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+          register: system_update_result
+          failed_when: system_update_result.rc != 0

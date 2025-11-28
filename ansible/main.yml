@@ -10,6 +10,7 @@
       failed_when: false
       tags: always
 
+- import_playbook: system-updates.yml
 - import_playbook: common-tools.yml
 - import_playbook: postgresql-deployment.yml
 - import_playbook: caddy-deployment.yml

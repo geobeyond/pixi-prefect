@@ -92,7 +92,7 @@
 
     - name: Copy pixi-unpack binary to node
       copy:
-        src: "/tmp/pixi-binaries/pixi-unpack-deploy"
+        src: "/tmp/pixi-binaries/pixi-unpack"
         dest: "/usr/local/bin/pixi-unpack"
         mode: "0755"
         owner: root

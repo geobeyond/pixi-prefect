@@ -20,18 +20,26 @@
     - name: Install PostgreSQL
       when: postgresql_status is undefined or postgresql_status.status.ActiveState != "active"
       block:
+        - name: Create temporary directory for PostgreSQL packages
+          file:
+            path: "/tmp/postgresql-packages"
+            state: directory
+            mode: "0755"
+
         - name: Copy PostgreSQL .deb packages to server
           copy:
             src: "{{ item }}"
-            dest: "/tmp"
+            dest: "/tmp/postgresql-packages"
             mode: "0644"
           with_fileglob:
             - "/tmp/offline-packages/postgresql-{{ postgresql_version }}/*.deb"
 
-        - name: Install PostgreSQL packages
-          shell: dpkg -i /tmp/*.deb
-          register: dpkg_result
-          failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
+        - name: Install PostgreSQL packages with dpkg
+          shell: "dpkg install /tmp/postgresql-packages/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/postgresql-packages/*.deb"
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+          register: apt_result
+          failed_when: apt_result.rc != 0
           notify: restart postgresql
 
         - name: Start and enable PostgreSQL
@@ -42,10 +50,8 @@
 
         - name: Clean up temporary PostgreSQL .deb files
           file:
-            path: "/tmp/{{ item | basename }}"
+            path: "/tmp/postgresql-packages"
             state: absent
-          with_fileglob:
-            - "/tmp/offline-packages/postgresql-{{ postgresql_version }}/*.deb"
 
     - name: Configure PostgreSQL database and user
       block:
