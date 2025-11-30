@@ -26,4 +26,4 @@ jobs:
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
         run: |
-          aws s3 cp pixi-prefect-main.zip s3://${S3_BUCKET_NAME}/pixi-prefect/pixi-prefect-main.zip --endpoint-url ${S3_ENDPOINT}
+          aws s3 cp pixi-prefect-main.zip s3://${S3_BUCKET_NAME}/pixi-prefect-main.zip --endpoint-url ${S3_ENDPOINT}
