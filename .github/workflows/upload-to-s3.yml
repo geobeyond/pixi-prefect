@@ -17,8 +17,7 @@ jobs:
           mkdir -p /tmp/pixi-prefect-main
           cp -r . /tmp/pixi-prefect-main/
           rm -rf /tmp/pixi-prefect-main/.git
-          cd /tmp && zip -r pixi-prefect-main.zip pixi-prefect-main
-          mv /tmp/pixi-prefect-main.zip .
+          cd /tmp && zip -r $GITHUB_WORKSPACE/pixi-prefect-main.zip pixi-prefect-main
 
       - name: Upload to S3
         env:
