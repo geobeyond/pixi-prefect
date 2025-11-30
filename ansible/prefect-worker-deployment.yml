@@ -16,10 +16,10 @@
 
     - name: Create flows directory
       file:
-        path: "/opt/prefect/flows"
+        path: "{{ prefect_home }}/flows"
         state: directory
-        owner: prefect
-        group: prefect
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
         mode: "0755"
 
     - name: Validate worker configuration
@@ -121,14 +121,14 @@
 
     - name: Create concurrency limit for each namespaced GPU
       become: yes
-      become_user: prefect
+      become_user: "{{ prefect_user }}"
       loop: "{{ all_gpu_limits }}"
       shell: >
-        cd /opt/prefect && 
+        cd {{ prefect_home }} &&
         pixi-env/env/bin/prefect global-concurrency-limit create {{ item }} --limit 1
       environment:
         PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
-        HOME: /opt/prefect
+        HOME: "{{ prefect_home }}"
       register: concurrency_result
       # Ignore errors if limit already exists
       failed_when:
