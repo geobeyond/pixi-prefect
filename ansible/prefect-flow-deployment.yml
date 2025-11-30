@@ -9,7 +9,7 @@
     flow_entrypoint: "{{ entrypoint }}"
     flow_function_name: "{{ flow_entrypoint.split(':')[1] }}"
     flow_deployment_name: "{{ deployment_name | default(flow_function_name) }}"
-    flow_target_dir: "/opt/prefect/flows/{{ flow_root_dir | basename }}"
+    flow_target_dir: "{{ prefect_home }}/flows/{{ flow_root_dir | basename }}"
     pixi_envs_dir: "{{ flow_target_dir}}/.pixi/envs"
     pixi_manifest_path: "{{ flow_target_dir }}/pixi.toml"
     pixi_run_command: "pixi run --no-lockfile-update --frozen"
@@ -68,16 +68,16 @@
       file:
         path: "{{ flow_target_dir }}"
         state: directory
-        owner: prefect
-        group: prefect
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
         mode: "0755"
 
     - name: Create pixi envs directory on target
       file:
         path: "{{ pixi_envs_dir }}"
         state: directory
-        owner: prefect
-        group: prefect
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
         mode: "0755"
 
     - name: Synchronize flow files to target
@@ -89,19 +89,19 @@
           - "--exclude=**/*.pyc"
           - "--exclude=**/__pycache__/"
           - "--exclude=prefect.yaml"
-          - "--chown=prefect:prefect"
+          - "--chown={{ prefect_user }}:{{ prefect_user }}"
         delete: yes
 
     - name: Copy pixi pack to target
       copy:
         src: "{{ temp_dir.path }}/flow-env.tar"
         dest: "{{ flow_target_dir }}/flow-env.tar"
-        owner: prefect
-        group: prefect
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
         mode: "0644"
 
     - name: Unpack pixi environment
-      become_user: prefect
+      become_user: "{{ prefect_user }}"
       shell: pixi-unpack --env-name default --output-directory {{ pixi_envs_dir }} {{ flow_target_dir }}/flow-env.tar
       args:
         creates: "{{ pixi_envs_dir }}/env"
@@ -110,13 +110,13 @@
       template:
         src: templates/prefect-deployment.j2
         dest: "{{ flow_target_dir }}/prefect.yaml"
-        owner: prefect
-        group: prefect
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
         mode: "0644"
 
     - name: Deploy flow to prefect server
       run_once: true
-      become_user: prefect
+      become_user: "{{ prefect_user }}"
       shell: "{{ pixi_run_command }} prefect deploy"
       args:
         chdir: "{{ flow_target_dir }}"

@@ -1,0 +1,14 @@
+---
+# Prefect service user configuration
+# These variables control which user runs Prefect services and where data is stored.
+#
+# By default:
+# - prefect_user: defaults to ansible_user (the SSH user)
+# - prefect_home: defaults to /opt/prefect
+#
+# To override, set these in your inventory.yml under all.vars:
+#   prefect_service_user: "prefect-svc"
+#   prefect_service_home: "/data/prefect"
+
+prefect_user: "{{ prefect_service_user | default(ansible_user) }}"
+prefect_home: "{{ prefect_service_home | default('/opt/prefect') }}"

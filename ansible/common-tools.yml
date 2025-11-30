@@ -1,15 +1,19 @@
 ---
+# Common tools deployment playbook
+# Installs required packages (ACL, rsync) and sets up prefect user/environment
+# Variables prefect_user and prefect_home are defined in group_vars/all.yml
+
 - name: Deploy common tools to all nodes
   hosts: all
   become: yes
-  tags: 
+  tags:
     - "prefect-server"
     - "prefect-worker"
 
   tasks:
 
     - name: Check if ACL is installed
-      command: dpkg -l acl
+      ansible.builtin.command: dpkg -l acl
       register: acl_status
       changed_when: false
       failed_when: false
@@ -18,13 +22,13 @@
       when: acl_status.rc != 0
       block:
         - name: Ensure ACL packages directory exists
-          file:
+          ansible.builtin.file:
             path: "/tmp/offline-packages/acl"
             state: directory
             mode: "0755"
 
         - name: Copy acl .deb packages to server
-          copy:
+          ansible.builtin.copy:
             src: "{{ item }}"
             dest: "/tmp/offline-packages/acl/"
             mode: "0644"
@@ -32,17 +36,17 @@
             - "/tmp/offline-packages/acl/*.deb"
 
         - name: Install acl packages
-          shell: dpkg -i /tmp/offline-packages/acl/*.deb
+          ansible.builtin.shell: dpkg -i /tmp/offline-packages/acl/*.deb
           register: dpkg_result
           failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
 
         - name: Clean up temporary acl .deb files
-          file:
+          ansible.builtin.file:
             path: "/tmp/offline-packages/acl"
             state: absent
 
     - name: Check if rsync is installed
-      command: dpkg -l rsync
+      ansible.builtin.command: dpkg -l rsync
       register: rsync_status
       changed_when: false
       failed_when: false
@@ -51,13 +55,13 @@
       when: rsync_status.rc != 0
       block:
         - name: Ensure rsync packages directory exists
-          file:
+          ansible.builtin.file:
             path: "/tmp/offline-packages/rsync"
             state: directory
             mode: "0755"
 
         - name: Copy rsync .deb packages to server
-          copy:
+          ansible.builtin.copy:
             src: "{{ item }}"
             dest: "/tmp/offline-packages/rsync/"
             mode: "0644"
@@ -65,25 +69,42 @@
             - "/tmp/offline-packages/rsync/*.deb"
 
         - name: Install rsync packages
-          shell: dpkg -i /tmp/offline-packages/rsync/*.deb
+          ansible.builtin.shell: dpkg -i /tmp/offline-packages/rsync/*.deb
           register: dpkg_result
           failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
 
         - name: Clean up temporary rsync .deb files
-          file:
+          ansible.builtin.file:
             path: "/tmp/offline-packages/rsync"
             state: absent
 
-    - name: Create prefect user
-      user:
-        name: prefect
+    # User creation - uses getent to check existence (best practice per Ansible docs)
+    # This avoids "usermod: user is currently used by process" errors when SSH user = service user
+    - name: Check if prefect service user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ prefect_user }}"
+        fail_key: false
+
+    - name: Create prefect service user (only if not exists)
+      ansible.builtin.user:
+        name: "{{ prefect_user }}"
         system: yes
         shell: /bin/bash
-        home: /opt/prefect
+        home: "{{ prefect_home }}"
         create_home: yes
+      when: ansible_facts.getent_passwd[prefect_user] is not defined
+
+    - name: Ensure prefect home directory exists
+      ansible.builtin.file:
+        path: "{{ prefect_home }}"
+        state: directory
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
+        mode: '0755'
 
     - name: Copy pixi binary to node
-      copy:
+      ansible.builtin.copy:
         src: "{{ lookup('pipe', 'which pixi') }}"
         dest: "/usr/local/bin/pixi"
         mode: "0755"
@@ -91,7 +112,7 @@
         group: root
 
     - name: Copy pixi-unpack binary to node
-      copy:
+      ansible.builtin.copy:
         src: "../pixi-unpack-deploy"
         dest: "/usr/local/bin/pixi-unpack"
         mode: "0755"
@@ -99,20 +120,20 @@
         group: root
 
     - name: Copy pixi base pack
-      copy:
+      ansible.builtin.copy:
         src: "/tmp/prefect-base.tar"
-        dest: "/opt/prefect/prefect-base.tar"
-        owner: prefect
-        group: prefect
+        dest: "{{ prefect_home }}/prefect-base.tar"
+        owner: "{{ prefect_user }}"
+        group: "{{ prefect_user }}"
         mode: "0644"
 
     - name: Unpack pixi environment
-      become_user: prefect
-      shell: pixi-unpack --output-directory /opt/prefect/pixi-env /opt/prefect/prefect-base.tar
+      become_user: "{{ prefect_user }}"
+      ansible.builtin.shell: pixi-unpack --output-directory {{ prefect_home }}/pixi-env {{ prefect_home }}/prefect-base.tar
       args:
-        creates: /opt/prefect/pixi-env
+        creates: "{{ prefect_home }}/pixi-env"
 
     - name: Remove pixi pack file
-      file:
-        path: "/opt/prefect/prefect-base.tar"
+      ansible.builtin.file:
+        path: "{{ prefect_home }}/prefect-base.tar"
         state: absent

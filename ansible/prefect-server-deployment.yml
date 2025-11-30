@@ -35,13 +35,13 @@
 
     - name: Create GPU work pool
       become: yes
-      become_user: prefect
+      become_user: "{{ prefect_user }}"
       shell: >
-        cd /opt/prefect && \
+        cd {{ prefect_home }} && \
         pixi-env/env/bin/prefect work-pool create gpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
+        HOME: "{{ prefect_home }}"
       register: gpu_pool_result
       failed_when:
         - gpu_pool_result.rc != 0
@@ -51,13 +51,13 @@
 
     - name: Create CPU work pool
       become: yes
-      become_user: prefect
+      become_user: "{{ prefect_user }}"
       shell: >
-        cd /opt/prefect && \
+        cd {{ prefect_home }} && \
         pixi-env/env/bin/prefect work-pool create cpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
-        HOME: /opt/prefect
+        HOME: "{{ prefect_home }}"
       register: cpu_pool_result
       failed_when:
         - cpu_pool_result.rc != 0
