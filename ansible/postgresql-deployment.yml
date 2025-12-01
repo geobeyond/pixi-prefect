@@ -22,20 +22,20 @@
       block:
         - name: Create temporary directory for PostgreSQL packages
           file:
-            path: "/tmp/postgresql-packages"
+            path: "/tmp/offline-packages/postgresql"
             state: directory
             mode: "0755"
 
         - name: Copy PostgreSQL .deb packages to server
           copy:
             src: "{{ item }}"
-            dest: "/tmp/postgresql-packages"
+            dest: "/tmp/offline-packages/postgresql"
             mode: "0644"
           with_fileglob:
-            - "/tmp/offline-packages/postgresql-{{ postgresql_version }}/*.deb"
+            - "../offline-packages/postgresql-{{ postgresql_version }}/*.deb"
 
         - name: Install PostgreSQL packages with dpkg
-          shell: "dpkg install /tmp/postgresql-packages/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/postgresql-packages/*.deb"
+          shell: "dpkg --install /tmp/offline-packages/postgresql/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/postgresql/*.deb"
           environment:
             DEBIAN_FRONTEND: noninteractive
           register: apt_result
@@ -50,7 +50,7 @@
 
         - name: Clean up temporary PostgreSQL .deb files
           file:
-            path: "/tmp/postgresql-packages"
+            path: "/tmp/offline-packages/postgresql"
             state: absent
 
     - name: Configure PostgreSQL database and user

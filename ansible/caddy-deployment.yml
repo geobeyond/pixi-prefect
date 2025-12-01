@@ -11,20 +11,20 @@
   tasks:
     - name: Create temporary directory for Caddy packages
       file:
-        path: "/tmp/caddy-packages"
+        path: "/tmp/offline-packages/caddy"
         state: directory
         mode: "0755"
 
     - name: Copy Caddy .deb packages to server
       copy:
         src: "{{ item }}"
-        dest: "/tmp/caddy-packages"
+        dest: "/tmp/offline-packages/caddy"
         mode: "0644"
       with_fileglob:
-        - "/tmp/offline-packages/caddy/*.deb"
+        - "../offline-packages/caddy/*.deb"
 
     - name: Install Caddy package
-      shell: "dpkg install /tmp/caddy-packages/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/caddy-packages/*.deb"
+      shell: "dpkg --install /tmp/offline-packages/caddy/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/caddy/*.deb"
       register: apt_caddy_result
       failed_when: apt_caddy_result.rc != 0
       notify: restart caddy
@@ -58,10 +58,8 @@
 
     - name: Clean up temporary Caddy .deb files
       file:
-        path: "/tmp/{{ item | basename }}"
+        path: "/tmp/offline-packages/caddy"
         state: absent
-      with_fileglob:
-        - "/tmp/offline-packages/caddy/*.deb"
 
   handlers:
     - name: restart caddy
