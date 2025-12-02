@@ -6,6 +6,7 @@
     - "prefect-worker"
   vars:
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
+    basic_auth_key: "{{ hostvars['localhost']['prefect_basic_auth_key'] | default(lookup('env', 'PREFECT_BASIC_AUTH_KEY')) }}"
 
   tasks:
     - name: Set default values for inventory-related variables
@@ -127,7 +128,7 @@
         cd /opt/prefect && 
         pixi-env/env/bin/prefect global-concurrency-limit create {{ item }} --limit 1
       environment:
-        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4200/api"
         HOME: /opt/prefect
       register: concurrency_result
       # Ignore errors if limit already exists

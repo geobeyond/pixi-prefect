@@ -9,7 +9,8 @@ User=prefect
 Group=prefect
 WorkingDirectory=/opt/prefect
 Environment=PREFECT_HOME=/opt/prefect/.prefect
-Environment=PREFECT_API_URL=http://{{ prefect_server_ip }}:4201/api
+Environment=PREFECT_API_AUTH_STRING="{{ basic_auth_key }}"
+Environment=PREFECT_API_URL=http://{{ prefect_server_ip }}:4200/api
 Environment=PYTHONPATH=/opt/prefect/flows
 
 # comma-separated list of GPU IDs, e.g. "0,1,2"

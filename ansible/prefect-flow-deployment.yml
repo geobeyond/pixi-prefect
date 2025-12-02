@@ -121,7 +121,7 @@
       args:
         chdir: "{{ flow_target_dir }}"
       environment:
-        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4200/api"
 
     - name: Remove pixi pack file
       file:

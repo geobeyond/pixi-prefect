@@ -97,9 +97,6 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
         print("Adding postgresql debian repository...")
         prepare_postgresql_repository()
 
-        print("Adding caddy debian repository...")
-        prepare_caddy_repository()
-
         print("Updating system package list...")
         run(
             shlex.split("sudo apt update"),
@@ -109,7 +106,10 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
         )
 
         deb_packages = set()
-        for server_dependency_name in ("acl", "postgresql-17", "caddy",):
+        for server_dependency_name in (
+                "acl",
+                "postgresql-17",
+        ):
             sub_dependencies = get_deb_package_dependencies(server_dependency_name)
             deb_packages.update(sub_dependencies)
             download_dir = target_dir / f"offline-packages/{server_dependency_name}"
@@ -140,8 +140,6 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
 
         print("Cleaning up...")
         remove_dir(target_dir)
-        _remove_deb_repository_from_apt_sources(
-            "caddy.list", "caddy.gpg")
         _remove_deb_repository_from_apt_sources(
             "postgresql.list", "postgresql.gpg")
 
@@ -246,6 +244,7 @@ def prepare_postgresql_repository():
         )
 
 
+# TODO: Remove this
 def prepare_caddy_repository():
     with tempfile.TemporaryDirectory() as temp_dir:
         work_dir = Path(temp_dir)

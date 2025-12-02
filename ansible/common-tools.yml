@@ -74,7 +74,15 @@
             path: "/tmp/offline-packages/rsync"
             state: absent
 
+    - name: Check if prefect user exists
+      command: getent passwd prefect
+      register: prefect_user_check
+      changed_when: false
+      failed_when: false
+
+
     - name: Create prefect user
+      when: prefect_user_check.rc != 0
       user:
         name: prefect
         system: yes
