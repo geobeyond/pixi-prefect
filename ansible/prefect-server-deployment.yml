@@ -42,6 +42,7 @@
         pixi-env/env/bin/prefect work-pool create gpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
+        PREFECT_API_AUTH_STRING: "{{ basic_auth_key }}"
         HOME: /opt/prefect
       register: gpu_pool_result
       failed_when:
@@ -58,6 +59,7 @@
         pixi-env/env/bin/prefect work-pool create cpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
+        PREFECT_API_AUTH_STRING: "{{ basic_auth_key }}"
         HOME: /opt/prefect
       register: cpu_pool_result
       failed_when:

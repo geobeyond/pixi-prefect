@@ -129,6 +129,7 @@
         pixi-env/env/bin/prefect global-concurrency-limit create {{ item }} --limit 1
       environment:
         PREFECT_API_URL: "http://{{ prefect_server_ip }}:4200/api"
+        PREFECT_API_AUTH_STRING: "{{ basic_auth_key }}"
         HOME: /opt/prefect
       register: concurrency_result
       # Ignore errors if limit already exists

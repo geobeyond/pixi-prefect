@@ -4,11 +4,11 @@
 - name: Load secrets
   hosts: localhost
   gather_facts: no
+  tags: always
   tasks:
     - name: Include secrets file if it exists
       include_vars: secrets.yml
       failed_when: false
-      tags: always
 
 - import_playbook: system-updates.yml
 - import_playbook: common-tools.yml

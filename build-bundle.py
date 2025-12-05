@@ -87,13 +87,6 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
             ignore=shutil.ignore_patterns("inventory.yml", "secrets.yml")
         )
 
-        print("Including Prefect flows...")
-        shutil.copytree(
-            base_dir / "flows",
-            target_dir / "flows",
-            ignore=shutil.ignore_patterns(".pixi", "__pycache__")
-        )
-
         print("Adding postgresql debian repository...")
         prepare_postgresql_repository()
 
@@ -131,6 +124,32 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
             text=True,
             check=True
         )
+
+        print("Including demo flows and packing their environments...")
+        demo_flows_dir = target_dir / "demo-flows"
+        demo_flows_dir.mkdir(parents=True, exist_ok=True)
+        for flow_dir in (i for i in (base_dir / "flows").iterdir() if i.is_dir()):
+            print(f"- flow {flow_dir.name!r}")
+            source_toml_file = flow_dir / "pixi.toml"
+            if not source_toml_file.exists():
+                print(f"{flow_dir} does not contain a pixi.toml file - cannot pack")
+                continue
+            target_dir = demo_flows_dir / flow_dir.name
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_packed_flow_file = target_dir / f"packed-env.tar"
+            run(
+                shlex.split(f"./pixi-pack {source_toml_file} --output-file {target_packed_flow_file}"),
+                capture_output=True,
+                cwd=pixi_pack_dir,
+                text=True,
+                check=True
+            )
+            shutil.copytree(
+                flow_dir,
+                target_dir,
+                ignore=shutil.ignore_patterns(".pixi", "__pycache__"),
+                dirs_exist_ok=True,
+            )
 
         print(f"Writing script...")
         write_install_script(target_dir)
@@ -241,23 +260,6 @@ def prepare_postgresql_repository():
             sources_line="deb http://apt.postgresql.org/pub/repos/apt noble-pgdg main",
             target_file=apt_list_file,
             gpg_keys_file=gpg_keys_file
-        )
-
-
-# TODO: Remove this
-def prepare_caddy_repository():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        work_dir = Path(temp_dir)
-        gpg_keys_file = work_dir / "caddy.gpg"
-        apt_list_file = work_dir / "caddy.list"
-        _get_gpg_keys(
-            gpg_keys_file,
-            "https://dl.cloudsmith.io/public/caddy/stable/gpg.key"
-        )
-        _add_deb_repository_to_apt_sources(
-            "deb https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main",
-            apt_list_file,
-            gpg_keys_file
         )
 
 
