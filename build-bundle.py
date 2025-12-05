@@ -134,9 +134,9 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
             if not source_toml_file.exists():
                 print(f"{flow_dir} does not contain a pixi.toml file - cannot pack")
                 continue
-            target_dir = demo_flows_dir / flow_dir.name
-            target_dir.mkdir(parents=True, exist_ok=True)
-            target_packed_flow_file = target_dir / f"packed-env.tar"
+            target_flow_dir = demo_flows_dir / flow_dir.name
+            target_flow_dir.mkdir(parents=True, exist_ok=True)
+            target_packed_flow_file = target_flow_dir / f"packed-env.tar"
             run(
                 shlex.split(f"./pixi-pack {source_toml_file} --output-file {target_packed_flow_file}"),
                 capture_output=True,
@@ -146,7 +146,7 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
             )
             shutil.copytree(
                 flow_dir,
-                target_dir,
+                target_flow_dir,
                 ignore=shutil.ignore_patterns(".pixi", "__pycache__"),
                 dirs_exist_ok=True,
             )
