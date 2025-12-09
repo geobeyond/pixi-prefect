@@ -6,8 +6,9 @@
     - "prefect-server"
   vars:
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
-    prefect_api_url: "http://0.0.0.0:4201/api"
+    prefect_api_url: "http://0.0.0.0:4200/api"
     postgresql_password: "{{ hostvars['localhost']['postgresql_password'] | default(lookup('env', 'POSTGRESQL_PASSWORD')) }}"
+    basic_auth_key: "{{ hostvars['localhost']['prefect_basic_auth_key'] | default(lookup('env', 'PREFECT_BASIC_AUTH_KEY')) }}"
 
   tasks:
     - name: Create Prefect server systemd unit
@@ -28,7 +29,7 @@
 
     - name: Wait for Prefect server to start
       wait_for:
-        port: 4201
+        port: 4200
         host: "{{ prefect_server_ip }}"
         delay: 10
         timeout: 180
@@ -41,6 +42,7 @@
         pixi-env/env/bin/prefect work-pool create gpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
+        PREFECT_API_AUTH_STRING: "{{ basic_auth_key }}"
         HOME: /opt/prefect
       register: gpu_pool_result
       failed_when:
@@ -57,6 +59,7 @@
         pixi-env/env/bin/prefect work-pool create cpu-pool --type process
       environment:
         PREFECT_API_URL: "{{ prefect_api_url }}"
+        PREFECT_API_AUTH_STRING: "{{ basic_auth_key }}"
         HOME: /opt/prefect
       register: cpu_pool_result
       failed_when:

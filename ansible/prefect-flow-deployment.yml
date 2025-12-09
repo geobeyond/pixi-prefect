@@ -1,11 +1,22 @@
 ---
+- name: Load secrets
+  hosts: localhost
+  gather_facts: no
+  tags: always
+  tasks:
+    - name: Include secrets file if it exists
+      include_vars: secrets.yml
+      failed_when: false
+
 - name: Deploy Prefect Flow
   hosts: prefect_workers
   become: yes
   tags: 
     - "prefect-flow"
   vars:
+    basic_auth_key: "{{ hostvars['localhost']['prefect_basic_auth_key'] | default(lookup('env', 'PREFECT_BASIC_AUTH_KEY')) }}"
     flow_root_dir: "{{ flow_dir }}"
+    packed_env_name: "{{ packed_env | default('packed-env.tar') }}"
     flow_entrypoint: "{{ entrypoint }}"
     flow_function_name: "{{ flow_entrypoint.split(':')[1] }}"
     flow_deployment_name: "{{ deployment_name | default(flow_function_name) }}"
@@ -17,8 +28,7 @@
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
     # optional variables for the deployment of the flow
     deployment_schedule: "{{ schedule | default(None) }}"
-    deployment_parameters: "{{ extra_parameters | default(None) }}"
-
+    deployment_parameters: "{{ default_parameters | default(None) }}"
   tasks:
 
     - name: Validate required variables
@@ -50,20 +60,6 @@
             - Targets: {{ groups['prefect_workers'] | join(', ') }}
       run_once: true
 
-    - name: Create temporary directory for flow packaging
-      delegate_to: localhost
-      run_once: true
-      become: no
-      tempfile:
-        state: directory
-      register: temp_dir
-
-    - name: Pack flow dependencies with pixi
-      delegate_to: localhost
-      run_once: true
-      become: no
-      shell: "pixi pack {{ flow_root_dir }}/pixi.toml --output-file {{ temp_dir.path }}/flow-env.tar"
-
     - name: Create flow directory on target
       file:
         path: "{{ flow_target_dir }}"
@@ -85,6 +81,7 @@
         src: "{{ flow_root_dir }}/"
         dest: "{{ flow_target_dir }}/"
         rsync_opts:
+          - "--exclude={{ packed_env_name }}"
           - "--exclude=*.pixi/"
           - "--exclude=**/*.pyc"
           - "--exclude=**/__pycache__/"
@@ -94,7 +91,7 @@
 
     - name: Copy pixi pack to target
       copy:
-        src: "{{ temp_dir.path }}/flow-env.tar"
+        src: "{{ flow_root_dir }}/{{ packed_env_name }}"
         dest: "{{ flow_target_dir }}/flow-env.tar"
         owner: prefect
         group: prefect
@@ -121,18 +118,12 @@
       args:
         chdir: "{{ flow_target_dir }}"
       environment:
-        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4201/api"
+        PREFECT_API_URL: "http://{{ prefect_server_ip }}:4200/api"
+        PREFECT_API_AUTH_STRING: "{{ basic_auth_key }}"
 
     - name: Remove pixi pack file
       file:
         path: "{{ flow_target_dir }}/flow-env.tar"
-        state: absent
-
-    - name: Clean up temporary directory
-      delegate_to: localhost
-      run_once: true
-      file:
-        path: "{{ temp_dir.path }}"
         state: absent
 
     - name: Display deployment success

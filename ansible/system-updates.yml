@@ -1,0 +1,43 @@
+---
+- name: Apply System Updates
+  hosts: all
+  become: yes
+  tags:
+    - "prefect-server"
+    - "prefect-worker"
+  tasks:
+    - name: Check if system updates are available locally
+      stat:
+        path: "../offline-packages/system-updates"
+      delegate_to: localhost
+      register: system_updates_local
+      become: no
+
+    - name: Apply system updates
+      when: system_updates_local.stat.exists
+      block:
+        - name: Create temporary directory for system update packages
+          file:
+            path: "/tmp/system-updates"
+            state: directory
+            mode: "0755"
+
+        - name: Copy system update .deb packages to node
+          copy:
+            src: "{{ item }}"
+            dest: "/tmp/system-updates/"
+            mode: "0644"
+          with_fileglob:
+            - "../offline-packages/system-updates/*.deb"
+
+        - name: Install system update packages
+          shell: "dpkg --install /tmp/system-updates/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/system-updates/*.deb"
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+          register: system_update_result
+          failed_when: system_update_result.rc != 0
+
+        - name: Clean up temporary system update .deb files
+          file:
+            path: "/tmp/system-updates"
+            state: absent

@@ -29,10 +29,10 @@
             dest: "/tmp/offline-packages/acl/"
             mode: "0644"
           with_fileglob:
-            - "/tmp/offline-packages/acl/*.deb"
+            - "../offline-packages/acl/*.deb"
 
         - name: Install acl packages
-          shell: dpkg -i /tmp/offline-packages/acl/*.deb
+          shell: "dpkg --install /tmp/offline-packages/acl/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/acl/*.deb"
           register: dpkg_result
           failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
 
@@ -62,10 +62,10 @@
             dest: "/tmp/offline-packages/rsync/"
             mode: "0644"
           with_fileglob:
-            - "/tmp/offline-packages/rsync/*.deb"
+            - "../offline-packages/rsync/*.deb"
 
         - name: Install rsync packages
-          shell: dpkg -i /tmp/offline-packages/rsync/*.deb
+          shell: "dpkg --install /tmp/offline-packages/rsync/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/rsync/*.deb"
           register: dpkg_result
           failed_when: dpkg_result.rc != 0 and "already installed" not in dpkg_result.stderr
 
@@ -84,7 +84,7 @@
 
     - name: Copy pixi binary to node
       copy:
-        src: "{{ lookup('pipe', 'which pixi') }}"
+        src: "../pixi"
         dest: "/usr/local/bin/pixi"
         mode: "0755"
         owner: root
@@ -92,7 +92,7 @@
 
     - name: Copy pixi-unpack binary to node
       copy:
-        src: "../pixi-unpack-deploy"
+        src: "../pixi-unpack"
         dest: "/usr/local/bin/pixi-unpack"
         mode: "0755"
         owner: root
@@ -100,7 +100,7 @@
 
     - name: Copy pixi base pack
       copy:
-        src: "/tmp/prefect-base.tar"
+        src: "../prefect-base.tar"
         dest: "/opt/prefect/prefect-base.tar"
         owner: prefect
         group: prefect

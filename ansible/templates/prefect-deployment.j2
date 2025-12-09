@@ -2,8 +2,8 @@ deployments:
   - name: "{{ flow_deployment_name }}"
     entrypoint: "{{ flow_entrypoint }}"
 {% if deployment_schedule is not none and deployment_schedule  != '' %}
-    schedule:
-        cron: "{{ deployment_schedule }}"
+    schedules:
+        - {{ deployment_schedule | tojson }}
 {% endif %}
 {% if deployment_parameters is not none and deployment_parameters != '' %}
     parameters: {{ deployment_parameters | tojson }}
