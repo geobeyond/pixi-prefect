@@ -1,4 +1,13 @@
 ---
+- name: Load secrets
+  hosts: localhost
+  gather_facts: no
+  tags: always
+  tasks:
+    - name: Include secrets file if it exists
+      include_vars: secrets.yml
+      failed_when: false
+
 - name: Deploy Prefect Flow
   hosts: prefect_workers
   become: yes
@@ -50,14 +59,6 @@
             - Parameters: {{ deployment_parameters if deployment_parameters is not none else 'none' }}
             - Targets: {{ groups['prefect_workers'] | join(', ') }}
       run_once: true
-
-    - name: Create temporary directory for flow packaging
-      delegate_to: localhost
-      run_once: true
-      become: no
-      tempfile:
-        state: directory
-      register: temp_dir
 
     - name: Create flow directory on target
       file:
@@ -123,13 +124,6 @@
     - name: Remove pixi pack file
       file:
         path: "{{ flow_target_dir }}/flow-env.tar"
-        state: absent
-
-    - name: Clean up temporary directory
-      delegate_to: localhost
-      run_once: true
-      file:
-        path: "{{ temp_dir.path }}"
         state: absent
 
     - name: Display deployment success
