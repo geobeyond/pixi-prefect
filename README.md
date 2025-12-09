@@ -7,26 +7,28 @@ This is meant to be used in a cluster of nodes with the following configuration:
 
 ```mermaid
 flowchart
-ansible-controller --> prefect-server
-ansible-controller --> prefect-worker-1
-ansible-controller --> prefect-worker-2
-ansible-controller --> prefect-worker-n
+pag-bootstrapper --> pag-controller
+pag-controller --> pag-server
+pag-controller --> pag-worker-1
+pag-controller --> pag-worker-2
+pag-controller --> pag-worker-n
 subgraph isolated-network 
-    prefect-server
-    prefect-worker-1
-    prefect-worker-2
-    prefect-worker-n
+    pag-controller
+    pag-server
+    pag-worker-1
+    pag-worker-2
+    pag-worker-n
 end
 ```
 
 As shown in the diagram, the majority of the cluster operates on an isolated network - this network is not connected
-to the Internet. The `ansible-controller` node is able to both access the Internet and communicate with the 
-isolated nodes. This communication with the nodes located in the `isolated-network` network happens via SSH.
+to the Internet. The `pag-bootstrapper` node is able to access the Internet and is used to build the installation 
+artifacts. This communication with the nodes located in the `isolated-network` network happens via SSH.
 
 This means that deployment of the prefect cluster must be done as a two-stage process:
 
-1. `ansible-controller` node gathers all packages and their dependencies by fetching them from the Internet
-2. packages get copied over to the relevant nodes where they are then installed - this process is coordinated using
+1. `pag-bootstrapper` node gathers all packages and their dependencies by fetching them from the Internet
+2. `pag-controller` is used to install stuff on itself and on the other nodes - this process is coordinated using
    ansible
 
 There are three types of deployment that need to be considered:
@@ -35,107 +37,65 @@ There are three types of deployment that need to be considered:
 2. Joining new worker nodes to the cluster;
 3. Deployment of prefect flows;
 
+> [!note]
+> This is known to work on `ubuntu:24.04` cloud variant.
+> 
+> 
+
+
+## Preparing installation artifacts
+
+On a freshly installed `ubuntu:24.04` machine (_i.e._ the `pag-bootstrapper`), run the `build-bundle.py` script. This
+will fetch the necessary packages and produce a tar file with everything needed to install the cluster.
+
+> [!IMPORTANT]
+> Be sure to not upgrade the bootstrapper machine, it should be kept in a similar state as the cluster nodes.
+
+```python
+python3 build-bundle.py
+```
+
 
 ## Preparing the ansible controller node
 
-> [!note]
-> This is known to work on `ubuntu:24.04` cloud variant.
-
-Start by installing rsync and [pipx], which will be used to install ansible - get it from the default ubuntu repos
+Copy the installation artifact produced by the `build-bundle.py` script onto the `pag-controller` node. Untar 
+it and run the included installation script:
 
 ```shell
-sudo apt update && \
-sudo apt install --yes pipx rsync
-pipx ensurepath
+tar -xvf pag-software-bundle.tar-gz
+cd pag-software-bundle
+bash install-pag-controller.sh
 ```
 
-Now install ansible via pipx:
+This will install ansible on the `pag-controller` node.
+
+Now make a copy of the provided ansible inventory and secrets files and adjust according to your cluster:
 
 ```shell
-pipx install --include-deps ansible
+cd ansible
+cp inventory.yml.example inventory.yml
+cp secrets.yml.example secrets.yml
 ```
 
-Now you will need to install [pixi]. Use the provided `install-pixi.sh` script, which was downloaded from 
-the pixi website
+After having configured the ansible inventory, and in order to have ansible correctly connect via SSH to all nodes 
+in the inventory, we advise you to run a preparation command of:
 
-```shell
-bash install-pixi.sh
-```
+> ```shell
+> ANSIBLE_HOST_KEY_CHECKING=false ansible all -i inventory.yml -m ping
+> ```
 
-Logout and log back in in order for the installation to be complete
-
-Finally, install `pixi-pack` and `pixi-unpack` with:
-
-```shell
-pixi global install pixi-pack pixi-unpack
-```
+More info here: https://github.com/ansible/ansible/issues/63870
 
 
 ## Deployment of the prefect server node
 
-In order to deploy the prefect server you will need to:
-
-Download all the system dependencies for the PostgreSQL database and the Caddy web server, which are being
-used in the prefect server setup
-
-This can be done by either:
-
-- Getting the files from object storage and into the `/tmp/offline-packages` directory`
-- Running the `download-packages.sh` script, which would download them from the ubuntu repositories - this can be 
-  achieved with the following command:
-
-  ```shell
-  bash download-packages.sh
-  ```
-
-> [!WARNING]
-> In either case, the downloaded .deb files must be placed at `/tmp/offline-packages/{acl,caddy,postgresql,rsync}`
-
-
-Now create a pixi packed environment with prefect and its additional dependencies
-
-This can be done by either:
-
-- Getting the already-packed env from object storage and into the `/tmp/prefect-base.tar` file
-- Using `pixi-pack` 
-
-  ```shell
-  pixi pack --output-file /tmp/prefect-base.tar
-  ```
-
-> [!WARNING]
-> In either case, the downloaded .deb files must be placed at `/tmp/prefect-base.tar`
-
-
-Create also:
-
-- The ansible secrets file, located at `ansible/secrets.yml`. Create this file, taking the 
-  existing `secrets.yml.example` file as a reference
-
-- The ansible inventory file, located at `ansible/inventory.yml`. Create this file, taking the 
-  existing `inventory.yml.example` file as a reference and add the addresses of the respective prefect server and worker 
-  nodes.
-
-> [!WARNING]
-> In order to have ansible correctly connect via SSH to all nodes in the inventory, we advise you to run a
-> preparation command of:
->
-> ```shell
-> ANSIBLE_HOST_KEY_CHECKING=false ansible all -i ansible/inventory.yml -m ping
-> ```
-> 
-> More info here: https://github.com/ansible/ansible/issues/63870
-
-
-Proceed to deploy the prefect server node with the following command:
+In order to deploy the prefect server you just need to execute the appropriate ansible playbook:
 
 ```shell
-cd ansible
 ansible-playbook -i inventory.yml main.yml --tags prefect-server 
 ```
 
-After a successful deployment the node shall be running the prefect server instance with port 4200 serving the prefect
-UI and port 4201 serving the API.
+After a successful deployment the node shall be running the prefect server instance on port 4200.
 
 The server will have been instantiated with two work pools of type `process`. These are named:
 
@@ -143,37 +103,30 @@ The server will have been instantiated with two work pools of type `process`. Th
 - `gpu-pool`. This pool is meant to be used for flows that access GPUs.
 
 
-
 > [!TIP]
-> After the deployment is complete, you can access the prefect server UI by tunneling both ports 4200 and 4201 to 
+> After the deployment is complete, you can access the prefect server UI by tunneling port 4200 to 
 > your local machine:
 > 
 > ```shell
-> ssh -L 4200:localhost:4200 -L 4201:localhost:4201 -N <ssh-host-alias>
+> ssh -L 4200:localhost:4200 -N <pag-controller-host>
 > ```
 > 
 > Now you can access the prefect server UI by visiting `http://localhost:4200` with your browser.
-> For authentication, username is `admin` and the password is the one you specified in the `secrets.yml` file.
+> For authentication, the credentials are the same you provided in the `secrets.yml` file
 > 
 
 
 ## Deployment of the prefect worker nodes
 
-In order to deploy the prefect worker nodes you will need to follow some of the same steps as for the prefect server:
-
-- prepare the same pixi environment - you can reuse the same `prefect-base.tar` file
-- Use the same inventory file
-- Use the same secrets file
-
-Then run the respective ansible playbook
+Deployment of worker nodes is similar, just run the ansible playbook:
 
 ```shell
 cd ansible
 ansible-playbook -i inventory.yml main.yml --tags prefect-worker 
 ```
 
-After a successful deployment the worker node can be running up to two prefect worker instances, one for each work 
-pool that is configured in the node's section of the ansible inventory. 
+After a successful deployment the worker node can be running up to two prefect worker instances, one 
+for each work pool that is configured in the node's section of the ansible inventory. 
 These are configured by the following systemd unit files:
 
 - `/etc/systemd/system/prefect-worker-cpu.service`
@@ -187,7 +140,12 @@ environment must be installed and configured. Additionally, the environments of 
 in the worker node. In practice this means:
 
 1. Update the ansible inventory file
-2. Run the ansible playbook that performs deployment of prefect workers again
+2. Run the ansible playbook again, like this:
+
+```shell
+cd ansible
+ansible-playbook -i inventory.yml main.yml --tags prefect-worker --limit <ip-of-new-worker-node>
+```
 
 
 ## Deploying prefect flows
@@ -211,15 +169,10 @@ The playbook accepts the following arguments:
 
 In order to deploy a new prefect flow into the airgapped cluster you need to
 
-1. Prepare a directory with the flow and suitable `pixi.toml` and `pixi.lock` files
+1. Prepare a directory with the flow and a suitable packed pixi env. Check the _Creating a new flow_ section below 
+   for an example of how to create a new flow;
 
-   A flow is deployable to the airgapped cluster if you prepare a directory with the following contents:
-
-   - `<some_python_module>.py` - the file containing the flow itself
-   - `pixi.toml` - the pixi configuration file, containing the necessary information to fetch the flow dependencies
-   - `pixi.lock` - the lockfile for the flow dependencies
-   
-   Check the _Creating a new flow_ section below for an example of how to create a new flow.
+2. Copy the flow directory to the `pag-controller` node;
 
 2. Run the `prefect-flow-deployment.yml` ansible playbook, passing it suitable arguments:
 
@@ -254,11 +207,11 @@ pixi init myflow
 This creates a new directory called `myflow` with a `pixi.toml` file inside. This file contains the configuration
 for the pixi environment. Change into the new directory.
 
-Specify the python version that the flow will use in order to have pixi prepare it - for example in order to use 
+Use Python version 3.12, as that is the version in use in the cluster nodes, which are based on ubuntu24:04
 Python the latest minor version of Python 3.9:
 
 ```shell
-pixi add python=3.9
+pixi add python=3.12
 ```
 
 Be sure to also add prefect as a dependency, specifically the same version minor version as the one used in the cluster.
@@ -331,9 +284,23 @@ pixi run prefect deployment run 'my_workflow/my_local_deployment'
 
 You can monitor the execution of the flow either on the prefect UI or on the terminal that is running the deployment.
 
-Once the flow works OK and we are ready to have it sent to the airgapped prefect cluster we can now optionally, 
-stop both the local prefect server and the flow deployment we used for testing - just press `ctrl+C` on both 
-terminal windows.
+Once the flow works OK and we are ready to have it sent to the airgapped prefect cluster we can now use pixi to pack the
+flow dependencies into a tar file and send it together with the flow code to the `pag-controller` node.
+
+```shell
+mkdir to-deploy
+cd to-deploy
+cp ../myflow.py .
+pixi exec pixi-pack ../pixi.toml --output-file packed-env.tar
+
+# copy the flow dir to pag-controller, for further deployment in the cluster
+cd ..
+scp -r to-deploy <pag-controller-host>
+```
+
+> [!TIP]
+> If you name the output file `packed-env.tar` the ansible playbook that is used to deploy flows in the cluster will
+> recognize it automatically.
 
 
 ## Extra notes
@@ -359,15 +326,22 @@ In order to run a prefect-related command manually on a worker node, you must:
 
 - ssh to the node
 - switch to the `prefect` user
-- set the `PREFECT_API_URL` environment variable - you can check the correct in the prefect workers systemd unit 
+- set the `PREFECT_API_URL` environment variable - you can check the correct value in the prefect workers systemd unit 
   files at `/etc/systemd/system/prefect-worker-{cpu,gpu}.service`
-- call prefect using its full path
+- set also the `PREFECT_API_AUTH_STRING` environment variable - you can check the correct value in the secrets file
+- Either activate the prefect pixi env
+- Use prefect CLI as usual
 
 ```shell
 # after having -> ssh <worker-node>
 sudo su prefect
 cd
-PREFECT_API_URL=http://10.0.100.164:4201/api /opt/prefect/pixi-env/env/bin/prefect --help
+export PREFECT_API_URL=http://10.0.100.164:4201/api 
+export PREFECT_API_AUTH_STRING="admin:my_password"
+
+# activate the pixi env
+source pixi-env/activate.sh
+prefect flow ls
 ```
 
 
