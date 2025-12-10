@@ -26,13 +26,23 @@
             state: directory
             mode: "0755"
 
+        - name: Find libldap package directory
+          find:
+            paths: "{{ playbook_dir }}/../offline-packages"
+            patterns: "libldap*"
+            file_type: directory
+          delegate_to: localhost
+          become: no
+          register: libldap_dir
+
         - name: Copy libldap .deb packages to server
           copy:
             src: "{{ item }}"
             dest: "/tmp/offline-packages/libldap"
             mode: "0644"
           with_fileglob:
-            - "../offline-packages/libldap-2.5-0/*.deb"
+            - "{{ libldap_dir.files[0].path }}/*.deb"
+          when: libldap_dir.files | length > 0
 
         - name: Install libldap packages with dpkg
           shell: "dpkg --install /tmp/offline-packages/libldap/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/libldap/*.deb"

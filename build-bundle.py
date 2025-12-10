@@ -51,6 +51,20 @@ def get_ubuntu_codename() -> str:
         return "noble"
 
 
+def get_libldap_package_name() -> str:
+    """Get the correct libldap package name for the current Ubuntu version.
+
+    Package names differ between Ubuntu versions:
+    - Ubuntu 22.04 (jammy): libldap-2.5-0
+    - Ubuntu 24.04 (noble): libldap2
+    """
+    codename = get_ubuntu_codename()
+    if codename == "jammy":
+        return "libldap-2.5-0"
+    else:
+        return "libldap2"
+
+
 def get_system_update_packages() -> list[str]:
     """Get all packages that would be upgraded or installed during apt upgrade."""
     result = run(
@@ -121,10 +135,13 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
             check=True
         )
 
+        libldap_package = get_libldap_package_name()
+        print(f"Using libldap package: {libldap_package}")
+
         deb_packages = set()
         for server_dependency_name in (
                 "acl",
-                "libldap-2.5-0",
+                libldap_package,
                 "postgresql-17",
         ):
             sub_dependencies = get_deb_package_dependencies(server_dependency_name)
