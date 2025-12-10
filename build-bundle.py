@@ -1,6 +1,6 @@
 """Build bundles for moving into airgapped nodes.
 
-This script should be run on a network-accessible ubuntu:24.04 machine,
+This script should be run on a network-accessible Ubuntu machine (22.04 or 24.04),
 as it is a similar environment to the one expected in the airgapped nodes.
 It uses the following external tools, which should be available on a default
 ubuntu installation:
@@ -26,6 +26,29 @@ from subprocess import (
     run,
 )
 from typing import Iterable
+
+
+def get_ubuntu_codename() -> str:
+    """Get the Ubuntu codename for the PostgreSQL apt repository."""
+    try:
+        result = run(
+            shlex.split("lsb_release -cs"),
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except (CalledProcessError, FileNotFoundError):
+        # Fallback: try reading /etc/os-release
+        try:
+            with open("/etc/os-release") as f:
+                for line in f:
+                    if line.startswith("VERSION_CODENAME="):
+                        return line.split("=")[1].strip().strip('"')
+        except FileNotFoundError:
+            pass
+        # Default to noble (24.04) if detection fails
+        return "noble"
 
 
 def get_system_update_packages() -> list[str]:
@@ -248,6 +271,8 @@ def get_deb_package_dependencies(package: str) -> list[str]:
 
 
 def prepare_postgresql_repository():
+    codename = get_ubuntu_codename()
+    print(f"Detected Ubuntu codename: {codename}")
     with tempfile.TemporaryDirectory() as temp_dir:
         work_dir = Path(temp_dir)
         gpg_keys_file = work_dir / "postgresql.gpg"
@@ -257,7 +282,7 @@ def prepare_postgresql_repository():
             "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
         )
         _add_deb_repository_to_apt_sources(
-            sources_line="deb http://apt.postgresql.org/pub/repos/apt noble-pgdg main",
+            sources_line=f"deb http://apt.postgresql.org/pub/repos/apt {codename}-pgdg main",
             target_file=apt_list_file,
             gpg_keys_file=gpg_keys_file
         )
