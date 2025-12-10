@@ -33,17 +33,18 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
-      - name: Download pixi-pack MUSL binary
+      - name: Download pixi-pack and pixi-unpack MUSL binaries
         run: |
-          # Get latest pixi-pack release
+          # Get latest pixi-pack release (includes both pixi-pack and pixi-unpack)
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/quantco/pixi-pack/releases/latest)
           TAG_NAME=$(echo "$LATEST_RELEASE" | jq -r '.tag_name')
           BASE_URL="https://github.com/quantco/pixi-pack/releases/download/$TAG_NAME"
 
-          # Download MUSL binary (statically linked, works on any Linux)
+          # Download MUSL binaries (statically linked, works on any Linux)
           curl -L -o vendored/pixi-pack "$BASE_URL/pixi-pack-x86_64-unknown-linux-musl"
-          chmod +x vendored/pixi-pack
-          echo "Downloaded pixi-pack $TAG_NAME"
+          curl -L -o vendored/pixi-unpack "$BASE_URL/pixi-unpack-x86_64-unknown-linux-musl"
+          chmod +x vendored/pixi-pack vendored/pixi-unpack
+          echo "Downloaded pixi-pack and pixi-unpack $TAG_NAME"
 
       - name: Build bundle
         run: |
@@ -76,17 +77,18 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
-      - name: Download pixi-pack MUSL binary
+      - name: Download pixi-pack and pixi-unpack MUSL binaries
         run: |
-          # Get latest pixi-pack release
+          # Get latest pixi-pack release (includes both pixi-pack and pixi-unpack)
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/quantco/pixi-pack/releases/latest)
           TAG_NAME=$(echo "$LATEST_RELEASE" | jq -r '.tag_name')
           BASE_URL="https://github.com/quantco/pixi-pack/releases/download/$TAG_NAME"
 
-          # Download MUSL binary (statically linked, works on any Linux)
+          # Download MUSL binaries (statically linked, works on any Linux)
           curl -L -o vendored/pixi-pack "$BASE_URL/pixi-pack-x86_64-unknown-linux-musl"
-          chmod +x vendored/pixi-pack
-          echo "Downloaded pixi-pack $TAG_NAME"
+          curl -L -o vendored/pixi-unpack "$BASE_URL/pixi-unpack-x86_64-unknown-linux-musl"
+          chmod +x vendored/pixi-pack vendored/pixi-unpack
+          echo "Downloaded pixi-pack and pixi-unpack $TAG_NAME"
 
       - name: Build bundle
         run: |
