@@ -23,7 +23,7 @@
     flow_target_dir: "/opt/prefect/flows/{{ flow_root_dir | basename }}"
     pixi_envs_dir: "{{ flow_target_dir}}/.pixi/envs"
     pixi_manifest_path: "{{ flow_target_dir }}/pixi.toml"
-    pixi_run_command: "pixi run --no-lockfile-update --frozen"
+    pixi_run_command: "pixi run --frozen"
     work_pool_name: "{{ work_pool | default('cpu-pool') }}"
     prefect_server_ip: "{{ groups['prefect_servers'][0] }}"
     # optional variables for the deployment of the flow
