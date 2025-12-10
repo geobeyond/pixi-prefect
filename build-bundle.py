@@ -124,6 +124,7 @@ def build_pag_controller_bundle(version: str | None = None) -> None:
         deb_packages = set()
         for server_dependency_name in (
                 "acl",
+                "libldap-2.5-0",
                 "postgresql-17",
         ):
             sub_dependencies = get_deb_package_dependencies(server_dependency_name)

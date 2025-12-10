@@ -17,6 +17,33 @@
       register: postgresql_status
       ignore_errors: yes
 
+    - name: Install libldap dependency
+      when: postgresql_status is undefined or postgresql_status.status.ActiveState != "active"
+      block:
+        - name: Create temporary directory for libldap packages
+          file:
+            path: "/tmp/offline-packages/libldap"
+            state: directory
+            mode: "0755"
+
+        - name: Copy libldap .deb packages to server
+          copy:
+            src: "{{ item }}"
+            dest: "/tmp/offline-packages/libldap"
+            mode: "0644"
+          with_fileglob:
+            - "../offline-packages/libldap-2.5-0/*.deb"
+
+        - name: Install libldap packages with dpkg
+          shell: "dpkg --install /tmp/offline-packages/libldap/*.deb || apt install --yes --fix-broken --allow-downgrades /tmp/offline-packages/libldap/*.deb"
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+
+        - name: Clean up temporary libldap .deb files
+          file:
+            path: "/tmp/offline-packages/libldap"
+            state: absent
+
     - name: Install PostgreSQL
       when: postgresql_status is undefined or postgresql_status.status.ActiveState != "active"
       block:
