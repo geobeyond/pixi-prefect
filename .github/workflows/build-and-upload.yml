@@ -33,6 +33,18 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
+      - name: Download pixi-pack MUSL binary
+        run: |
+          # Get latest pixi-pack release
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/quantco/pixi-pack/releases/latest)
+          TAG_NAME=$(echo "$LATEST_RELEASE" | jq -r '.tag_name')
+          BASE_URL="https://github.com/quantco/pixi-pack/releases/download/$TAG_NAME"
+
+          # Download MUSL binary (statically linked, works on any Linux)
+          curl -L -o vendored/pixi-pack "$BASE_URL/pixi-pack-x86_64-unknown-linux-musl"
+          chmod +x vendored/pixi-pack
+          echo "Downloaded pixi-pack $TAG_NAME"
+
       - name: Build bundle
         run: |
           export BUNDLE_VERSION="${{ steps.version.outputs.version }}-ubuntu2404"
@@ -63,6 +75,18 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
+
+      - name: Download pixi-pack MUSL binary
+        run: |
+          # Get latest pixi-pack release
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/quantco/pixi-pack/releases/latest)
+          TAG_NAME=$(echo "$LATEST_RELEASE" | jq -r '.tag_name')
+          BASE_URL="https://github.com/quantco/pixi-pack/releases/download/$TAG_NAME"
+
+          # Download MUSL binary (statically linked, works on any Linux)
+          curl -L -o vendored/pixi-pack "$BASE_URL/pixi-pack-x86_64-unknown-linux-musl"
+          chmod +x vendored/pixi-pack
+          echo "Downloaded pixi-pack $TAG_NAME"
 
       - name: Build bundle
         run: |
