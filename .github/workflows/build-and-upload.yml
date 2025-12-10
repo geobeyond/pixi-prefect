@@ -1,0 +1,140 @@
+name: Build Bundle and Upload to S3
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v2025.12.10)'
+        required: false
+        default: ''
+
+jobs:
+  build-ubuntu-2404:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="$(date +%Y.%m.%d)-${GITHUB_SHA::7}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Build bundle
+        run: |
+          export BUNDLE_VERSION="${{ steps.version.outputs.version }}-ubuntu2404"
+          python3 build-bundle.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pag-software-bundle-ubuntu2404-${{ steps.version.outputs.version }}
+          path: pag-software-bundle-${{ steps.version.outputs.version }}-ubuntu2404.tar.gz
+          retention-days: 30
+
+  build-ubuntu-2204:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="$(date +%Y.%m.%d)-${GITHUB_SHA::7}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Build bundle
+        run: |
+          export BUNDLE_VERSION="${{ steps.version.outputs.version }}-ubuntu2204"
+          python3 build-bundle.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pag-software-bundle-ubuntu2204-${{ steps.version.outputs.version }}
+          path: pag-software-bundle-${{ steps.version.outputs.version }}-ubuntu2204.tar.gz
+          retention-days: 30
+
+  upload-to-s3:
+    needs: [build-ubuntu-2404, build-ubuntu-2204]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="$(date +%Y.%m.%d)-${GITHUB_SHA::7}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download Ubuntu 24.04 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pag-software-bundle-ubuntu2404-${{ steps.version.outputs.version }}
+
+      - name: Download Ubuntu 22.04 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pag-software-bundle-ubuntu2204-${{ steps.version.outputs.version }}
+
+      - name: List artifacts
+        run: ls -la *.tar.gz
+
+      - name: Upload to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Upload Ubuntu 24.04 bundle
+          aws s3 cp "pag-software-bundle-${VERSION}-ubuntu2404.tar.gz" \
+            "s3://${S3_BUCKET_NAME}/pag-software-bundle-ubuntu2404.tar.gz" \
+            --endpoint-url "${S3_ENDPOINT}"
+
+          # Upload Ubuntu 22.04 bundle
+          aws s3 cp "pag-software-bundle-${VERSION}-ubuntu2204.tar.gz" \
+            "s3://${S3_BUCKET_NAME}/pag-software-bundle-ubuntu2204.tar.gz" \
+            --endpoint-url "${S3_ENDPOINT}"
+
+          # Also upload versioned copies
+          aws s3 cp "pag-software-bundle-${VERSION}-ubuntu2404.tar.gz" \
+            "s3://${S3_BUCKET_NAME}/releases/${VERSION}/pag-software-bundle-ubuntu2404.tar.gz" \
+            --endpoint-url "${S3_ENDPOINT}"
+
+          aws s3 cp "pag-software-bundle-${VERSION}-ubuntu2204.tar.gz" \
+            "s3://${S3_BUCKET_NAME}/releases/${VERSION}/pag-software-bundle-ubuntu2204.tar.gz" \
+            --endpoint-url "${S3_ENDPOINT}"
+
+          echo "Uploaded to S3:"
+          echo "- s3://${S3_BUCKET_NAME}/pag-software-bundle-ubuntu2404.tar.gz (latest)"
+          echo "- s3://${S3_BUCKET_NAME}/pag-software-bundle-ubuntu2204.tar.gz (latest)"
+          echo "- s3://${S3_BUCKET_NAME}/releases/${VERSION}/pag-software-bundle-ubuntu2404.tar.gz"
+          echo "- s3://${S3_BUCKET_NAME}/releases/${VERSION}/pag-software-bundle-ubuntu2204.tar.gz"
