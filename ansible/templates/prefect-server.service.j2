@@ -10,7 +10,7 @@ Group=prefect
 WorkingDirectory=/opt/prefect
 Environment=PREFECT_HOME=/opt/prefect/.prefect
 Environment=PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:{{ postgresql_password }}@localhost/prefect
-Environment=PREFECT_API_URL=http://localhost:4200/api
+Environment=PREFECT_API_URL=http://{{ inventory_hostname }}:4200/api
 Environment=PREFECT_SERVER_API_AUTH_STRING="{{ basic_auth_key }}"
 Environment=PREFECT_SERVER_API_HOST=0.0.0.0
 Environment=PREFECT_SERVER_API_PORT=4200
